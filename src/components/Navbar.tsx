@@ -1,19 +1,70 @@
 import { motion } from "framer-motion";
-import { Building2, User, LogOut } from "lucide-react";
+import { Building2, User, LogOut, Users, FolderPlus, BarChart3, UserPlus } from "lucide-react";
 import { Button } from "./ui/button";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/modules/auth/contexts/AuthContext";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface NavbarProps {
   userName?: string;
   userRole?: string;
   projectName?: string;
+  onAddUser?: () => void;
+  onAddProject?: () => void;
+  onAssignProject?: () => void;
 }
 
-export const Navbar = ({ userName, userRole, projectName }: NavbarProps) => {
+export const Navbar = ({ userName, userRole, projectName, onAddUser, onAddProject, onAssignProject }: NavbarProps) => {
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const handleLogout = () => {
+    logout();
     navigate("/");
+  };
+
+  const handleAddUser = () => {
+    if (onAddUser) {
+      onAddUser();
+    } else {
+      // Default behavior if no handler is provided
+      alert("Add User functionality is not available for this user role");
+    }
+  };
+
+  const handleAddProject = () => {
+    if (onAddProject) {
+      onAddProject();
+    } else {
+      // Default behavior if no handler is provided
+      alert("Add Project functionality is not available for this user role");
+    }
+  };
+
+  const handleAssignProject = () => {
+    if (onAssignProject) {
+      onAssignProject();
+    } else {
+      // Default behavior if no handler is provided
+      alert("Assign Project functionality is not available for this user role");
+    }
+  };
+
+  const handleCharts = () => {
+    // Navigate to charts page or open charts modal
+    alert("Charts functionality will be implemented soon!");
+  };
+
+  const handleProjects = () => {
+    navigate("/projects");
   };
 
   return (
@@ -42,21 +93,55 @@ export const Navbar = ({ userName, userRole, projectName }: NavbarProps) => {
 
         {userName && (
           <div className="flex items-center space-x-4">
-            <div className="hidden md:flex items-center space-x-2">
-              <User className="w-4 h-4 text-muted-foreground" />
-              <div className="text-right">
-                <p className="text-sm font-medium text-foreground">{userName}</p>
-                <p className="text-xs text-muted-foreground">{userRole}</p>
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleLogout}
-              className="hover:bg-destructive/10 hover:text-destructive"
-            >
-              <LogOut className="w-4 h-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                    <User className="w-4 h-4 text-white" />
+                  </div>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{userName}</p>
+                    <p className="text-xs leading-none text-muted-foreground">{userRole}</p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  {userRole === "PMAG" && (
+                    <>
+                      <DropdownMenuItem onClick={handleAddUser}>
+                        <Users className="mr-2 h-4 w-4" />
+                        <span>Add User</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleAddProject}>
+                        <FolderPlus className="mr-2 h-4 w-4" />
+                        <span>Add Project</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleAssignProject}>
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        <span>Assign Project</span>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  <DropdownMenuItem onClick={handleProjects}>
+                    <FolderPlus className="mr-2 h-4 w-4" />
+                    <span>Projects</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleCharts}>
+                    <BarChart3 className="mr-2 h-4 w-4" />
+                    <span>Charts</span>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </div>

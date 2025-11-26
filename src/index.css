@@ -6,6 +6,14 @@
 All colors MUST be HSL.
 */
 
+@font-face {
+  font-family: 'Adani';
+  src: url('/adani.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     /* Adani Brand Colors */
@@ -121,7 +129,7 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'Adani', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
 }
 
@@ -204,7 +212,7 @@ All colors MUST be HSL.
   display: table;
   border-collapse: collapse;
   width: 100%;
-  font-family: 'Calibri', 'Arial', sans-serif;
+  font-family: 'Adani', 'Calibri', 'Arial', sans-serif;
   font-size: 11pt;
 }
 
@@ -286,7 +294,7 @@ All colors MUST be HSL.
   border: none;
   outline: none;
   padding: 4px 8px;
-  font-family: 'Calibri', 'Arial', sans-serif;
+  font-family: 'Adani', 'Calibri', 'Arial', sans-serif;
   font-size: 11pt;
   background: transparent;
   color: #000;
