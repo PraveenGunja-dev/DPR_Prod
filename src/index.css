@@ -1,6 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 47.4% 11.2%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 100% 50%;
+    --destructive-foreground: 210 40% 98%;
+    --ring: 215 20.2% 65.1%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+    --muted: 223 47% 11%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+    --popover: 224 71% 4%;
+    --popover-foreground: 215 20.2% 65.1%;
+    --card: 224 71% 4%;
+    --card-foreground: 213 31% 91%;
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 1.2%;
+    --secondary: 222.2 47.4% 11.2%;
+    --secondary-foreground: 210 40% 98%;
+    --accent: 216 34% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --ring: 216 34% 17%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Excel-like styling */
+.excel-container {
+  @apply border rounded-lg overflow-hidden shadow-sm bg-white;
+}
+
+.excel-toolbar {
+  @apply bg-gray-50;
+}
+
+.excel-button {
+  @apply text-gray-700 hover:bg-gray-200;
+}
+
+.excel-save-button {
+  @apply bg-blue-600 text-white hover:bg-blue-700;
+}
+
+.excel-grid-wrapper table {
+  @apply w-full text-xs border-collapse;
+}
+
+.excel-grid-wrapper thead th {
+  @apply bg-gray-100 text-gray-700 font-medium border border-gray-300 px-2 py-1 text-left;
+}
+
+.excel-grid-wrapper tbody tr {
+  @apply hover:bg-blue-50;
+}
+
+.excel-grid-wrapper tbody tr:nth-child(even) {
+  @apply bg-gray-50;
+}
+
+.excel-grid-wrapper tbody tr:nth-child(odd) {
+  @apply bg-white;
+}
+
+.excel-grid-wrapper tbody td {
+  @apply border border-gray-300 p-0;
+}
+
+.excel-grid-wrapper input {
+  @apply border-0 rounded-none focus:ring-0 focus:ring-offset-0 h-8 px-2 py-1 w-full;
+}
+
+.excel-grid-wrapper input:focus {
+  @apply ring-1 ring-blue-500;
+}
+
+.excel-status-bar {
+  @apply bg-gray-50 border-t px-4 py-1 text-xs text-gray-600;
+}
+
+/* Selected cell highlight */
+.excel-grid-wrapper tbody td:focus-within {
+  @apply ring-1 ring-blue-500 z-10 relative;
+}
+
+/* Header cell styling */
+.excel-grid-wrapper thead th:first-child {
+  @apply text-center;
+}
+
+/* Row number styling */
+.excel-grid-wrapper tbody td:first-child {
+  @apply text-center text-gray-500 bg-gray-100;
+}
 
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
@@ -12,171 +140,6 @@ All colors MUST be HSL.
   font-weight: normal;
   font-style: normal;
   font-display: swap;
-}
-
-/* Custom Handsontable Themes */
-/* Adani Blue Theme */
-.htThemeAdaniBlue {
-  --ht-theme-primary: hsl(218 91% 40%);
-  --ht-theme-secondary: hsl(271 76% 53%);
-  --ht-theme-background: #ffffff;
-  --ht-theme-header-bg: hsl(218 91% 40%);
-  --ht-theme-header-text: #ffffff;
-  --ht-theme-cell-border: #d4d4d4;
-  --ht-theme-row-even: #f8f9fa;
-  --ht-theme-row-odd: #ffffff;
-  --ht-theme-text: #333333;
-}
-
-.htThemeAdaniBlue.handsontable .ht_master tr:nth-of-type(even) td {
-  background-color: var(--ht-theme-row-even) !important;
-}
-
-.htThemeAdaniBlue.handsontable .ht_master tr:nth-of-type(odd) td {
-  background-color: var(--ht-theme-row-odd) !important;
-}
-
-.htThemeAdaniBlue.handsontable th,
-.htThemeAdaniBlue.handsontable td {
-  color: var(--ht-theme-text) !important;
-  border-color: var(--ht-theme-cell-border) !important;
-}
-
-.htThemeAdaniBlue.handsontable th {
-  background-color: var(--ht-theme-header-bg) !important;
-  color: var(--ht-theme-header-text) !important;
-}
-
-/* Emerald Green Theme */
-.htThemeEmerald {
-  --ht-theme-primary: #059669;
-  --ht-theme-secondary: #047857;
-  --ht-theme-background: #f0fdf4;
-  --ht-theme-header-bg: #059669;
-  --ht-theme-header-text: #ffffff;
-  --ht-theme-cell-border: #bbf7d0;
-  --ht-theme-row-even: #dcfce7;
-  --ht-theme-row-odd: #f0fdf4;
-  --ht-theme-text: #065f46;
-}
-
-.htThemeEmerald.handsontable .ht_master tr:nth-of-type(even) td {
-  background-color: var(--ht-theme-row-even) !important;
-}
-
-.htThemeEmerald.handsontable .ht_master tr:nth-of-type(odd) td {
-  background-color: var(--ht-theme-row-odd) !important;
-}
-
-.htThemeEmerald.handsontable th,
-.htThemeEmerald.handsontable td {
-  color: var(--ht-theme-text) !important;
-  border-color: var(--ht-theme-cell-border) !important;
-}
-
-.htThemeEmerald.handsontable th {
-  background-color: var(--ht-theme-header-bg) !important;
-  color: var(--ht-theme-header-text) !important;
-}
-
-/* Sunset Orange Theme */
-.htThemeSunset {
-  --ht-theme-primary: #ea580c;
-  --ht-theme-secondary: #dc2626;
-  --ht-theme-background: #fff7ed;
-  --ht-theme-header-bg: #ea580c;
-  --ht-theme-header-text: #ffffff;
-  --ht-theme-cell-border: #fed7aa;
-  --ht-theme-row-even: #ffedd5;
-  --ht-theme-row-odd: #fff7ed;
-  --ht-theme-text: #9a3412;
-}
-
-.htThemeSunset.handsontable .ht_master tr:nth-of-type(even) td {
-  background-color: var(--ht-theme-row-even) !important;
-}
-
-.htThemeSunset.handsontable .ht_master tr:nth-of-type(odd) td {
-  background-color: var(--ht-theme-row-odd) !important;
-}
-
-.htThemeSunset.handsontable th,
-.htThemeSunset.handsontable td {
-  color: var(--ht-theme-text) !important;
-  border-color: var(--ht-theme-cell-border) !important;
-}
-
-.htThemeSunset.handsontable th {
-  background-color: var(--ht-theme-header-bg) !important;
-  color: var(--ht-theme-header-text) !important;
-}
-
-/* Ocean Blue Theme */
-.htThemeOcean {
-  --ht-theme-primary: #0ea5e9;
-  --ht-theme-secondary: #0284c7;
-  --ht-theme-background: #f0f9ff;
-  --ht-theme-header-bg: #0ea5e9;
-  --ht-theme-header-text: #ffffff;
-  --ht-theme-cell-border: #bae6fd;
-  --ht-theme-row-even: #e0f2fe;
-  --ht-theme-row-odd: #f0f9ff;
-  --ht-theme-text: #0891b2;
-}
-
-.htThemeOcean.handsontable .ht_master tr:nth-of-type(even) td {
-  background-color: var(--ht-theme-row-even) !important;
-}
-
-.htThemeOcean.handsontable .ht_master tr:nth-of-type(odd) td {
-  background-color: var(--ht-theme-row-odd) !important;
-}
-
-.htThemeOcean.handsontable th,
-.htThemeOcean.handsontable td {
-  color: var(--ht-theme-text) !important;
-  border-color: var(--ht-theme-cell-border) !important;
-}
-
-.htThemeOcean.handsontable th {
-  background-color: var(--ht-theme-header-bg) !important;
-  color: var(--ht-theme-header-text) !important;
-}
-
-/* Dark Theme */
-.htThemeDark {
-  --ht-theme-primary: #6366f1;
-  --ht-theme-secondary: #4f46e5;
-  --ht-theme-background: #1e293b;
-  --ht-theme-header-bg: #334155;
-  --ht-theme-header-text: #f1f5f9;
-  --ht-theme-cell-border: #475569;
-  --ht-theme-row-even: #334155;
-  --ht-theme-row-odd: #1e293b;
-  --ht-theme-text: #e2e8f0;
-}
-
-.htThemeDark.handsontable {
-  background-color: var(--ht-theme-background) !important;
-}
-
-.htThemeDark.handsontable .ht_master tr:nth-of-type(even) td {
-  background-color: var(--ht-theme-row-even) !important;
-}
-
-.htThemeDark.handsontable .ht_master tr:nth-of-type(odd) td {
-  background-color: var(--ht-theme-row-odd) !important;
-}
-
-.htThemeDark.handsontable th,
-.htThemeDark.handsontable td {
-  color: var(--ht-theme-text) !important;
-  border-color: var(--ht-theme-cell-border) !important;
-}
-
-.htThemeDark.handsontable th {
-  background-color: var(--ht-theme-header-bg) !important;
-  color: var(--ht-theme-header-text) !important;
 }
 
 @layer base {
@@ -338,6 +301,7 @@ All colors MUST be HSL.
 .excel-toolbar {
   background: #f3f3f3;
   border-bottom: 1px solid #d4d4d4;
+  padding: 4px 8px;
 }
 
 .excel-button {
@@ -346,6 +310,8 @@ All colors MUST be HSL.
   background: white;
   border: 1px solid #d4d4d4;
   color: #333;
+  padding: 0 8px;
+  margin: 0 2px;
 }
 
 .excel-button:hover {
@@ -359,6 +325,7 @@ All colors MUST be HSL.
   background: #217346;
   color: white;
   border: none;
+  padding: 0 12px;
 }
 
 .excel-save-button:hover {
@@ -480,71 +447,7 @@ All colors MUST be HSL.
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-size: 11px;
+  height: 22px;
 }
 
-/* Handsontable Customization */
-.handsontable {
-  font-family: 'Adani', 'Calibri', 'Arial', sans-serif !important;
-  font-size: 11pt !important;
-  z-index: 10 !important;
-}
-
-.htCore {
-  border: none !important;
-}
-
-.ht_master .wtHolder {
-  background: #ffffff !important;
-}
-
-.ht_clone_top_left_corner th,
-.ht_clone_left td:first-of-type,
-.ht_clone_top th:first-of-type {
-  border-color: #a6a6a6 !important;
-}
-
-.ht_clone_top th,
-.ht_clone_left th {
-  background: #f3f3f3 !important;
-  font-weight: 600 !important;
-  color: #333 !important;
-}
-
-.ht_clone_left {
-  z-index: 11 !important;
-}
-
-.ht_clone_top {
-  z-index: 12 !important;
-}
-
-.ht_clone_top_left_corner {
-  z-index: 13 !important;
-}
-
-.ht_master td,
-.ht_clone_left td,
-.ht_clone_top th {
-  border-color: #d4d4d4 !important;
-}
-
-.ht_master tr:nth-of-type(odd) td {
-  background: #ffffff !important;
-}
-
-.ht_master tr:nth-of-type(even) td {
-  background: #fafafa !important;
-}
-
-.handsontable td.htInvalid {
-  background: #ffcccc !important;
-}
-
-.htAutocompleteArrow {
-  color: #333 !important;
-}
-
-.htMenu .ht_master table td {
-  font-family: 'Adani', 'Calibri', 'Arial', sans-serif !important;
-  font-size: 11pt !important;
-}

@@ -1,8 +1,9 @@
 import { motion } from "framer-motion";
-import { Building2, User, LogOut, Users, FolderPlus, BarChart3, UserPlus, AlertCircle } from "lucide-react";
+import { Building2, User, LogOut, Users, FolderPlus, BarChart3, UserPlus, AlertCircle, Bell } from "lucide-react";
 import { Button } from "./ui/button";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/modules/auth/contexts/AuthContext";
+import { useNotification } from "@/modules/auth/contexts/NotificationContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +28,7 @@ interface NavbarProps {
 export const Navbar = ({ userName, userRole, projectName, onAddUser, onAddProject, onAssignProject, onAddIssue }: NavbarProps) => {
   const navigate = useNavigate();
   const { logout, user, refreshUserProfile } = useAuth();
+  const { notifications, unreadCount, markAllAsRead } = useNotification();
 
   // Fetch user profile on component mount
   useEffect(() => {
@@ -128,6 +130,57 @@ export const Navbar = ({ userName, userRole, projectName, onAddUser, onAddProjec
         </div>
 
         <div className="flex items-center space-x-4">
+          {/* Notification Bell */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative rounded-full">
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-500 rounded-full">
+                    {unreadCount}
+                  </span>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-80" align="end" forceMount>
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <DropdownMenuLabel className="font-normal flex items-center justify-between">
+                  <span>Notifications</span>
+                  {unreadCount > 0 && (
+                    <Button variant="ghost" size="sm" onClick={markAllAsRead}>
+                      Mark all as read
+                    </Button>
+                  )}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  {notifications.length === 0 ? (
+                    <div className="p-4 text-center text-muted-foreground">
+                      No notifications
+                    </div>
+                  ) : (
+                    notifications.slice(0, 5).map((notification) => (
+                      <DropdownMenuItem 
+                        key={notification.id} 
+                        className={`flex flex-col items-start p-3 ${!notification.read ? 'bg-muted' : ''}`}
+                      >
+                        <div className="font-medium">{notification.title}</div>
+                        <div className="text-sm text-muted-foreground">{notification.message}</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {new Date(notification.timestamp).toLocaleDateString()} {new Date(notification.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuGroup>
+              </motion.div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full">

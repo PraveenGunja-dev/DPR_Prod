@@ -59,6 +59,9 @@ const testDatabaseConnection = () => {
 // Test database connection
 testDatabaseConnection();
 
+// Import Redis cache
+const { cache } = require('./cache/redisClient');
+
 // Authentication middleware - Oracle P6 API compatible
 // Supports both Bearer token (JWT) and session-based authentication
 const authenticateToken = (req, res, next) => {
@@ -121,6 +124,8 @@ const { router: authRoutes, setPool, getUserProfile } = require('./routes/auth')
 const projectRoutes = require('./routes/projects');
 const projectAssignmentRoutes = require('./routes/projectAssignment');
 const activityRoutes = require('./routes/activities');
+const dprRoutes = require('./routes/dpr');
+const dprSupervisorRoutes = require('./routes/dprSupervisor');
 
 // Set the pool for auth routes
 setPool(pool, authenticateToken);
@@ -129,6 +134,8 @@ setPool(pool, authenticateToken);
 app.use('/project', authenticateToken, projectRoutes);
 app.use('/activity', authenticateToken, activityRoutes);
 app.use('/project-assignment', authenticateToken, projectAssignmentRoutes);
+app.use('/dpr', authenticateToken, dprRoutes);
+app.use('/dpr-supervisor', authenticateToken, dprSupervisorRoutes);
 
 // Import individual route handlers
 const { router: authRouter } = require('./routes/auth');
@@ -181,7 +188,7 @@ app.post('/auth/refresh-token', refreshTokenMiddleware, async (req, res, next) =
 // Oracle P6 compatible profile endpoint
 app.get('/auth/profile', authenticateToken, getUserProfile);
 
-// Oracle P6 compatible supervisors endpoint
+// Oracle P6 compatible supervisors endpoint with caching
 app.get('/auth/supervisors', authenticateToken, async (req, res) => {
   try {
     // Check if user is PMAG
@@ -189,19 +196,32 @@ app.get('/auth/supervisors', authenticateToken, async (req, res) => {
       return res.status(403).json({ message: 'Access denied. PMAG privileges required.' });
     }
     
-    // Get all users with supervisor role directly
+    // Try to get data from cache first
+    const cacheKey = 'supervisors_list';
+    let supervisors = await cache.get(cacheKey);
+    
+    if (supervisors) {
+      console.log('Returning supervisors from cache');
+      return res.status(200).json(supervisors);
+    }
+    
+    // If not in cache, fetch from database
+    console.log('Fetching supervisors from database');
     const result = await pool.query(
       'SELECT user_id, name, email, role FROM users WHERE role = $1 ORDER BY name',
       ['supervisor']
     );
     
     // Transform to Oracle P6 format (PascalCase)
-    const supervisors = result.rows.map(user => ({
+    supervisors = result.rows.map(user => ({
       ObjectId: user.user_id,
       Name: user.name,
       Email: user.email,
       Role: user.role
     }));
+    
+    // Cache the result for 5 minutes
+    await cache.set(cacheKey, supervisors, 300);
     
     res.status(200).json(supervisors);
   } catch (error) {
@@ -259,5 +279,3 @@ app.listen(PORT, () => {
 });
 
 module.exports = { app, pool, authenticateToken };
-
-

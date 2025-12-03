@@ -1,11 +1,22 @@
 // server/controllers/projectsController.js
 const pool = require('../db');
+const { cache } = require('../cache/redisClient');
 
-// Get all projects for a user based on their role
+// Get all projects for a user based on their role with caching
 const getUserProjects = async (req, res) => {
   try {
     const userId = req.user.userId;
     const userRole = req.user.role;
+    
+    // Create cache key based on user ID and role
+    const cacheKey = `user_projects_${userId}_${userRole}`;
+    
+    // Try to get data from cache first
+    let cachedProjects = await cache.get(cacheKey);
+    if (cachedProjects) {
+      console.log(`Returning projects for user ${userId} from cache`);
+      return res.status(200).json(cachedProjects);
+    }
     
     let result;
     
@@ -45,6 +56,9 @@ const getUserProjects = async (req, res) => {
       `);
     }
     
+    // Cache the result for 5 minutes
+    await cache.set(cacheKey, result.rows, 300);
+    
     res.status(200).json(result.rows);
   } catch (error) {
     console.error('Error fetching user projects:', error);
@@ -52,12 +66,22 @@ const getUserProjects = async (req, res) => {
   }
 };
 
-// Get a specific project by ID
+// Get a specific project by ID with caching
 const getProjectById = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.userId;
     const userRole = req.user.role;
+    
+    // Create cache key for specific project
+    const cacheKey = `project_${id}_${userId}_${userRole}`;
+    
+    // Try to get data from cache first
+    let cachedProject = await cache.get(cacheKey);
+    if (cachedProject) {
+      console.log(`Returning project ${id} from cache`);
+      return res.status(200).json(cachedProject);
+    }
     
     let result;
     
@@ -100,6 +124,9 @@ const getProjectById = async (req, res) => {
       return res.status(404).json({ message: 'Project not found or not assigned to you' });
     }
     
+    // Cache the result for 5 minutes
+    await cache.set(cacheKey, result.rows[0], 300);
+    
     res.status(200).json(result.rows[0]);
   } catch (error) {
     console.error('Error fetching project:', error);
@@ -132,6 +159,9 @@ const createProject = async (req, res) => {
         actual_start as "ActualStartDate", 
         actual_end as "ActualFinishDate"
     `, [name, location, status, progress, planStart, planEnd, actualStart, actualEnd]);
+    
+    // Invalidate cache for all users since we've added a new project
+    await cache.flushAll();
     
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -179,6 +209,9 @@ const updateProject = async (req, res) => {
       return res.status(404).json({ message: 'Project not found' });
     }
     
+    // Invalidate cache for all users since we've updated a project
+    await cache.flushAll();
+    
     res.status(200).json(result.rows[0]);
   } catch (error) {
     console.error('Error updating project:', error);
@@ -208,6 +241,9 @@ const deleteProject = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Project not found' });
     }
+    
+    // Invalidate cache for all users since we've deleted a project
+    await cache.flushAll();
     
     res.status(200).json({ message: 'Project deleted successfully', project: result.rows[0] });
   } catch (error) {

@@ -1,5 +1,6 @@
 // server/controllers/projectAssignmentController.js
 const pool = require('../db');
+const { cache } = require('../cache/redisClient');
 
 // Assign a project to a supervisor
 const assignProjectToSupervisor = async (req, res) => {
@@ -52,6 +53,9 @@ const assignProjectToSupervisor = async (req, res) => {
       [projectId, supervisorId, req.user.userId]
     );
     
+    // Invalidate cache for this supervisor's projects
+    await cache.del(`assigned_projects_${supervisorId}`);
+    
     res.status(201).json({ 
       message: 'Project assigned to supervisor successfully',
       assignment: result.rows[0]
@@ -62,7 +66,7 @@ const assignProjectToSupervisor = async (req, res) => {
   }
 };
 
-// Get assigned projects for a supervisor
+// Get assigned projects for a supervisor with caching
 const getAssignedProjects = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -70,6 +74,16 @@ const getAssignedProjects = async (req, res) => {
     // Check if user is a supervisor
     if (req.user.role !== 'supervisor') {
       return res.status(403).json({ message: 'Access denied. Supervisor privileges required.' });
+    }
+    
+    // Create cache key for assigned projects
+    const cacheKey = `assigned_projects_${userId}`;
+    
+    // Try to get data from cache first
+    let cachedProjects = await cache.get(cacheKey);
+    if (cachedProjects) {
+      console.log(`Returning assigned projects for supervisor ${userId} from cache`);
+      return res.status(200).json(cachedProjects);
     }
     
     // Get projects assigned to this supervisor
@@ -90,6 +104,9 @@ const getAssignedProjects = async (req, res) => {
       ORDER BY p.name
     `, [userId]);
     
+    // Cache the result for 5 minutes
+    await cache.set(cacheKey, result.rows, 300);
+    
     res.status(200).json(result.rows);
   } catch (error) {
     console.error('Error fetching assigned projects:', error);
@@ -97,7 +114,7 @@ const getAssignedProjects = async (req, res) => {
   }
 };
 
-// Get supervisors for a project (PMAG only)
+// Get supervisors for a project (PMAG only) with caching
 const getProjectSupervisors = async (req, res) => {
   try {
     // Check if user is PMAG (admin)
@@ -106,6 +123,16 @@ const getProjectSupervisors = async (req, res) => {
     }
     
     const { projectId } = req.params;
+    
+    // Create cache key for project supervisors
+    const cacheKey = `project_supervisors_${projectId}`;
+    
+    // Try to get data from cache first
+    let cachedSupervisors = await cache.get(cacheKey);
+    if (cachedSupervisors) {
+      console.log(`Returning supervisors for project ${projectId} from cache`);
+      return res.status(200).json(cachedSupervisors);
+    }
     
     // Get supervisors assigned to this project
     const result = await pool.query(`
@@ -119,6 +146,9 @@ const getProjectSupervisors = async (req, res) => {
       WHERE pa.project_id = $1 AND u.role = 'supervisor'
       ORDER BY u.name
     `, [projectId]);
+    
+    // Cache the result for 5 minutes
+    await cache.set(cacheKey, result.rows, 300);
     
     res.status(200).json(result.rows);
   } catch (error) {
@@ -151,6 +181,9 @@ const unassignProjectFromSupervisor = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Assignment not found' });
     }
+    
+    // Invalidate cache for this supervisor's projects
+    await cache.del(`assigned_projects_${supervisorId}`);
     
     res.status(200).json({ 
       message: 'Project unassigned from supervisor successfully'

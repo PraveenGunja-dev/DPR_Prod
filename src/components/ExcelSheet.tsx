@@ -1,17 +1,18 @@
 import { useState, useEffect } from "react";
-import { Button } from "./ui/button";
-import { Save, Download, Palette } from "lucide-react";
-import { toast } from "sonner";
-import { HotTable } from "@handsontable/react";
-import Handsontable from "handsontable";
-import { registerAllModules } from "handsontable/registry";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Download, Palette, Maximize, Minimize } from "lucide-react";
 import * as XLSX from "xlsx";
 import { motion } from "framer-motion";
-// Import Handsontable styles correctly
-import "handsontable/dist/handsontable.css";
-
-// Register all Handsontable modules to ensure cell types are available
-registerAllModules();
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "@/components/ui/table";
+import { toast } from "sonner";
 
 interface CellData {
   value: string;
@@ -25,14 +26,32 @@ interface ExcelSheetProps {
   columns: string[];
   rows: CellData[][];
   onSubmit?: () => void;
+  onSave?: (data: any[][]) => void;
+  isReadOnly?: boolean;
+  showSubmitButton?: boolean;
+  submitButtonText?: string;
+  yesterdayDate?: string;
+  todayDate?: string;
 }
 
-export const ExcelSheet = ({ title, columns, rows: initialRows, onSubmit }: ExcelSheetProps) => {
+export const ExcelSheet = ({ 
+  title, 
+  columns, 
+  rows: initialRows, 
+  onSubmit, 
+  onSave,
+  isReadOnly = false,
+  showSubmitButton = false,
+  submitButtonText = "Submit Sheet",
+  yesterdayDate,
+  todayDate
+}: ExcelSheetProps) => {
   const [data, setData] = useState<any[][]>([]);
-  let hotInstance: Handsontable | null = null;
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Theme state - using custom themes
   const [theme, setTheme] = useState<
+    "modern-excel" | 
     "htThemeAdaniBlue" | 
     "htThemeEmerald" | 
     "htThemeSunset" | 
@@ -40,9 +59,9 @@ export const ExcelSheet = ({ title, columns, rows: initialRows, onSubmit }: Exce
     "htThemeDark" | 
     "htThemeMain" | 
     "htThemeHorizon"
-  >("htThemeAdaniBlue");
+  >("modern-excel");
 
-  // Convert initialRows to Handsontable data format
+  // Convert initialRows to data format
   useEffect(() => {
     const convertedData = initialRows.map(row => 
       row.map(cell => cell.value)
@@ -50,40 +69,30 @@ export const ExcelSheet = ({ title, columns, rows: initialRows, onSubmit }: Exce
     setData(convertedData);
   }, [initialRows]);
 
-  // Define column settings for Handsontable
-  const columnSettings = columns.map((col, index) => {
-    const firstRowCell = initialRows[0]?.[index];
-    if (!firstRowCell) return {};
+  const handleCellChange = (rowIndex: number, colIndex: number, value: string) => {
+    if (isReadOnly) return;
     
-    const settings: any = {
-      readOnly: firstRowCell.readOnly || false  // Default to false if not specified
-    };
-    
-    // Use correct Handsontable cell types
-    if (firstRowCell.columnType === "number") {
-      settings.type = "numeric";
-      settings.numericFormat = {
-        pattern: '0,0.00'
-      };
-    } else if (firstRowCell.columnType === "date") {
-      settings.type = "date";
-      settings.dateFormat = "YYYY-MM-DD";
-    } else if (firstRowCell.columnType === "dropdown" && firstRowCell.options) {
-      settings.type = "dropdown";
-      settings.source = firstRowCell.options;
-    } else {
-      // Default to text type for any other case including undefined columnType
-      settings.type = "text";
-    }
-    
-    return settings;
-  });
+    const newData = [...data];
+    newData[rowIndex] = [...newData[rowIndex]];
+    newData[rowIndex][colIndex] = value;
+    setData(newData);
+  };
 
   const handleSubmit = () => {
-    toast.success("Sheet submitted successfully!", {
-      description: "Your data has been sent for review.",
-    });
-    onSubmit?.();
+    if (onSubmit) {
+      onSubmit();
+    } else {
+      toast.success("Sheet submitted successfully!", {
+        description: "Your data has been sent for review.",
+      });
+    }
+  };
+
+  const handleSave = () => {
+    if (onSave) {
+      onSave(data);
+      toast.success("Sheet saved successfully!");
+    }
   };
 
   const handleExport = () => {
@@ -143,6 +152,7 @@ export const ExcelSheet = ({ title, columns, rows: initialRows, onSubmit }: Exce
 
   // Handle theme change
   const handleThemeChange = (newTheme: 
+    "modern-excel" | 
     "htThemeAdaniBlue" | 
     "htThemeEmerald" | 
     "htThemeSunset" | 
@@ -152,47 +162,44 @@ export const ExcelSheet = ({ title, columns, rows: initialRows, onSubmit }: Exce
     "htThemeHorizon"
   ) => {
     setTheme(newTheme);
-    // Update the Handsontable instance with the new theme if it exists
-    if (hotInstance) {
-      // Apply theme by updating the container class
-      const container = hotInstance.rootElement;
-      if (container) {
-        // Remove all theme classes
-        container.classList.remove(
-          "htThemeAdaniBlue",
-          "htThemeEmerald",
-          "htThemeSunset",
-          "htThemeOcean",
-          "htThemeDark",
-          "htThemeMain",
-          "htThemeHorizon"
-        );
-        // Add the new theme class
-        container.classList.add(newTheme);
-      }
-      
-      // Also update the settings to ensure the theme is applied
-      hotInstance.updateSettings({
-        className: `${newTheme} htCenter htMiddle`
-      });
-    }
+  };
+
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
+  };
+
+  // Add row handler
+  const handleAddRow = () => {
+    if (isReadOnly) return;
+    
+    const newRow = Array(columns.length).fill("");
+    setData([...data, newRow]);
+  };
+
+  // Delete row handler
+  const handleDeleteRow = (rowIndex: number) => {
+    if (isReadOnly) return;
+    
+    const newData = [...data];
+    newData.splice(rowIndex, 1);
+    setData(newData);
   };
 
   return (
     <motion.div 
-      className="excel-container"
+      className={`excel-container ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
       {/* Excel Toolbar */}
       <motion.div 
-        className="excel-toolbar"
+        className={`excel-toolbar ${isFullscreen ? 'bg-gray-100' : 'bg-white'}`}
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: 0.1, duration: 0.3 }}
       >
-        <div className="flex items-center justify-between px-4 py-2">
+        <div className="flex items-center justify-between px-4 py-2 border-b">
           <motion.h2 
             className="text-sm font-semibold text-gray-700"
             initial={{ opacity: 0 }}
@@ -214,7 +221,9 @@ export const ExcelSheet = ({ title, columns, rows: initialRows, onSubmit }: Exce
                 value={theme}
                 onChange={(e) => handleThemeChange(e.target.value as any)}
                 className="text-xs border rounded px-1 py-0.5"
+                disabled={isReadOnly}
               >
+                <option value="modern-excel">Modern Excel</option>
                 <option value="htThemeAdaniBlue">Adani Blue</option>
                 <option value="htThemeEmerald">Emerald Green</option>
                 <option value="htThemeSunset">Sunset Orange</option>
@@ -239,83 +248,151 @@ export const ExcelSheet = ({ title, columns, rows: initialRows, onSubmit }: Exce
                 Export
               </Button>
             </motion.div>
+            
             <motion.div
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
               <Button 
                 size="sm" 
-                onClick={handleSubmit} 
-                className="excel-save-button"
+                variant="ghost" 
+                className="excel-button"
+                onClick={toggleFullscreen}
               >
-                <Save className="w-4 h-4 mr-1" />
-                Submit Sheet
+                {isFullscreen ? (
+                  <>
+                    <Minimize className="w-4 h-4 mr-1" />
+                    Exit Fullscreen
+                  </>
+                ) : (
+                  <>
+                    <Maximize className="w-4 h-4 mr-1" />
+                    Fullscreen
+                  </>
+                )}
               </Button>
             </motion.div>
+            
+            {showSubmitButton && !isReadOnly && (
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Button 
+                  size="sm" 
+                  onClick={handleSubmit} 
+                  className="excel-save-button bg-blue-600 hover:bg-blue-700"
+                >
+                  {submitButtonText}
+                </Button>
+              </motion.div>
+            )}
           </motion.div>
         </div>
       </motion.div>
 
-      {/* Handsontable Grid */}
+      {/* Fullscreen header when in fullscreen mode */}
+      {isFullscreen && (
+        <div className="p-4 border-b bg-white">
+          <h2 className="text-xl font-bold">{title} - Fullscreen View</h2>
+          <p className="text-sm text-muted-foreground">{data.length} rows × {columns.length} columns</p>
+        </div>
+      )}
+
+      {/* Table */}
       <motion.div 
-        className={`excel-grid-wrapper ${theme}`}
+        className={`excel-grid-wrapper ${theme} ${isFullscreen ? 'h-[calc(100vh-140px)]' : 'max-h-[600px]'}`}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.3, duration: 0.3 }}
       >
-        <HotTable
-          data={data}
-          colHeaders={columns}
-          rowHeaders={true}
-          contextMenu={["row_above", "row_below", "col_left", "col_right", "---------", "remove_row", "remove_col", "---------", "undo", "redo", "---------", "make_read_only", "alignment"]}
-          height="auto"
-          maxRows={100}
-          minRows={10}
-          minCols={columns.length}
-          minSpareRows={1}
-          licenseKey="non-commercial-and-evaluation"
-          columns={columnSettings}
-          className={`${theme} htCenter htMiddle`}
-          stretchH="all"
-          manualColumnResize={true}
-          manualRowResize={true}
-          filters={true}
-          dropdownMenu={true}
-          columnSorting={true}
-          afterChange={(changes, source) => {
-            if (changes && source !== 'loadData') {
-              // Update data state when changes occur
-              const newData = [...data];
-              changes.forEach((change) => {
-                const [row, prop, oldValue, newValue] = change;
-                if (typeof row === 'number' && typeof prop === 'number') {
-                  if (!newData[row]) newData[row] = [];
-                  newData[row][prop] = newValue;
-                }
-              });
-              setData(newData);
-            }
-          }}
-          afterInit={function() {
-            hotInstance = this as Handsontable;
-            // Apply initial theme
-            const container = this.rootElement;
-            if (container) {
-              container.classList.add(theme);
-            }
-          }}
-        />
+        <div className="overflow-auto border">
+          <Table className="border-collapse">
+            <TableHeader className="bg-gray-100 sticky top-0 z-10">
+              <TableRow className="hover:bg-gray-100">
+                <TableHead className="w-12 text-center font-medium text-gray-700 border-r border-b border-gray-300 bg-gray-100">#</TableHead>
+                {columns.map((column, index) => (
+                  <TableHead 
+                    key={index} 
+                    className="min-w-[120px] text-left font-medium text-gray-700 border-r border-b border-gray-300 bg-gray-100 px-2 py-1"
+                  >
+                    {column}
+                  </TableHead>
+                ))}
+                {!isReadOnly && (
+                  <TableHead className="w-8 border-b border-gray-300 bg-gray-100"></TableHead>
+                )}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.map((row, rowIndex) => (
+                <TableRow 
+                  key={rowIndex} 
+                  className={`${rowIndex % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-blue-50`}
+                >
+                  <TableCell className="w-12 text-center text-gray-500 text-xs border-r border-t border-gray-300">
+                    {rowIndex + 1}
+                  </TableCell>
+                  {columns.map((_, colIndex) => (
+                    <TableCell 
+                      key={colIndex} 
+                      className="p-0 border-r border-t border-gray-300"
+                    >
+                      <Input
+                        value={row[colIndex] || ""}
+                        onChange={(e) => handleCellChange(rowIndex, colIndex, e.target.value)}
+                        className="border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 h-8 px-2 py-1 text-xs"
+                        readOnly={isReadOnly}
+                      />
+                    </TableCell>
+                  ))}
+                  {!isReadOnly && (
+                    <TableCell className="w-8 p-0 border-t border-gray-300">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 w-full rounded-none text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => handleDeleteRow(rowIndex)}
+                      >
+                        ×
+                      </Button>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </motion.div>
+
+      {/* Add row button */}
+      {!isReadOnly && (
+        <div className="border-t bg-gray-50 px-4 py-2">
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="h-8"
+            onClick={handleAddRow}
+          >
+            + Add Row
+          </Button>
+        </div>
+      )}
 
       {/* Status Bar */}
       <motion.div 
-        className="excel-status-bar"
+        className="excel-status-bar border-t bg-gray-50 px-4 py-1"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4, duration: 0.3 }}
       >
-        <div className="text-xs text-gray-600">
-          Ready | {data.length} rows × {columns.length} columns
+        <div className="flex justify-between items-center w-full">
+          <div className="text-xs text-gray-600">
+            Ready | {data.length} rows × {columns.length} columns
+          </div>
+          <div className="text-xs text-gray-600">
+            Adani Workflow Excel Sheet
+          </div>
         </div>
       </motion.div>
     </motion.div>
