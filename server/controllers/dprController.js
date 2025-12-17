@@ -70,13 +70,14 @@ const saveDraftSheet = async (req, res) => {
     const { sheetId, sheetData } = req.body;
 
     // Verify ownership
+    // Allow saving of both draft and rejected sheets
     const checkResult = await pool.query(
-      'SELECT * FROM dpr_sheets WHERE id = $1 AND supervisor_id = $2 AND status = $3',
-      [sheetId, userId, 'draft']
+      'SELECT * FROM dpr_sheets WHERE id = $1 AND supervisor_id = $2 AND status IN ($3, $4)',
+      [sheetId, userId, 'draft', 'pm_rejected']
     );
 
     if (checkResult.rows.length === 0) {
-      return res.status(404).json({ message: 'Draft sheet not found or access denied' });
+      return res.status(404).json({ message: 'Sheet not found, access denied, or invalid status for saving' });
     }
 
     // Update sheet data
@@ -102,13 +103,14 @@ const submitSheet = async (req, res) => {
     const { sheetId } = req.body;
 
     // Verify ownership and status
+    // Allow submission of both draft and rejected sheets
     const checkResult = await pool.query(
-      'SELECT * FROM dpr_sheets WHERE id = $1 AND supervisor_id = $2 AND status = $3',
-      [sheetId, userId, 'draft']
+      'SELECT * FROM dpr_sheets WHERE id = $1 AND supervisor_id = $2 AND status IN ($3, $4)',
+      [sheetId, userId, 'draft', 'pm_rejected']
     );
 
     if (checkResult.rows.length === 0) {
-      return res.status(404).json({ message: 'Draft sheet not found or already submitted' });
+      return res.status(404).json({ message: 'Sheet not found, access denied, or invalid status for submission' });
     }
 
     // Update status to submitted and lock
@@ -121,20 +123,23 @@ const submitSheet = async (req, res) => {
     );
 
     // Add history record
+    // Get the old status to log correctly
+    const oldStatus = checkResult.rows[0].status;
     await pool.query(
       `INSERT INTO dpr_sheet_history (sheet_id, action, performed_by, old_status, new_status)
-       VALUES ($1, 'submitted', $2, 'draft', 'submitted')`,
-      [sheetId, userId]
+       VALUES ($1, 'submitted', $2, $3, 'submitted')`,
+      [sheetId, userId, oldStatus]
     );
 
     // Log sheet submission
     const { createSystemLog } = require('../utils/systemLogger');
     const sheet = result.rows[0];
+    const submissionType = oldStatus === 'pm_rejected' ? 'resubmitted after rejection' : 'submitted';
     await createSystemLog(
       'SHEET_SUBMITTED',
       userId,
       `Sheet: ${sheetId}, Project: ${sheet.project_id}`,
-      `Sheet ${sheetId} submitted by supervisor`
+      `Sheet ${sheetId} ${submissionType} by supervisor`
     );
 
     res.status(200).json({ message: 'Sheet submitted successfully', sheet: result.rows[0] });

@@ -150,6 +150,26 @@ const getMmsRfiDraftEntry = async (req, res) => {
       return res.status(200).json(result.rows[0]);
     }
 
+    // Check if there's a rejected entry for today (supervisor can edit)
+    result = await pool.query(
+      `SELECT * FROM mms_rfi_entries 
+       WHERE supervisor_id = $1 
+       AND project_id = $2 
+       AND entry_date = $3
+       AND status = 'rejected_by_pm'`,
+      [userId, projectId, todayStr]
+    );
+
+    if (result.rows.length > 0) {
+      // Return rejected entry as editable
+      const rejectedEntry = {
+        ...result.rows[0],
+        isReadOnly: false,
+        status: 'rejected_by_pm'
+      };
+      return res.status(200).json(rejectedEntry);
+    }
+
     // Check if there's a submitted entry for today (supervisor can view but not edit)
     result = await pool.query(
       `SELECT * FROM mms_rfi_entries 
@@ -223,13 +243,14 @@ const saveMmsRfiDraftEntry = async (req, res) => {
     const { entryId, data } = req.body;
 
     // Verify ownership
+    // Allow saving of both draft and rejected entries
     const checkResult = await pool.query(
-      'SELECT * FROM mms_rfi_entries WHERE id = $1 AND supervisor_id = $2 AND status = $3',
-      [entryId, userId, 'draft']
+      'SELECT * FROM mms_rfi_entries WHERE id = $1 AND supervisor_id = $2 AND status IN ($3, $4)',
+      [entryId, userId, 'draft', 'rejected_by_pm']
     );
 
     if (checkResult.rows.length === 0) {
-      return res.status(404).json({ message: 'Draft entry not found or access denied' });
+      return res.status(404).json({ message: 'Entry not found, access denied, or invalid status for saving' });
     }
 
     // Update entry data
@@ -257,14 +278,15 @@ const submitMmsRfiEntry = async (req, res) => {
     console.log(`Supervisor ${userId} attempting to submit MMS & RFI entry ${entryId}`);
 
     // Verify ownership and status
+    // Allow submission of both draft and rejected entries
     const checkResult = await pool.query(
-      'SELECT * FROM mms_rfi_entries WHERE id = $1 AND supervisor_id = $2 AND status = $3',
-      [entryId, userId, 'draft']
+      'SELECT * FROM mms_rfi_entries WHERE id = $1 AND supervisor_id = $2 AND status IN ($3, $4)',
+      [entryId, userId, 'draft', 'rejected_by_pm']
     );
 
     if (checkResult.rows.length === 0) {
       console.log(`MMS & RFI entry ${entryId} not found or already submitted`);
-      return res.status(404).json({ message: 'Draft entry not found or already submitted' });
+      return res.status(404).json({ message: 'Entry not found, access denied, or invalid status for submission' });
     }
 
     // Update status to submitted_to_pm

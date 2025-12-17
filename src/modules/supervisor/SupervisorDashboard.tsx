@@ -232,6 +232,7 @@ const SupervisorDashboard = () => {
         : currentDraftEntry.data_json;
       
       // Check if entry is read-only (submitted or approved)
+      // Rejected entries should be editable
       const isReadOnly = currentDraftEntry.isReadOnly || 
                         currentDraftEntry.status === 'submitted_to_pm' || 
                         currentDraftEntry.status === 'approved_by_pm';
@@ -299,8 +300,9 @@ const SupervisorDashboard = () => {
   const handleSaveEntry = async () => {
     if (!currentDraftEntry) return;
     
-    // Don't allow saving if entry is read-only (submitted)
-    if (isEntryReadOnly || currentDraftEntry.status !== 'draft') {
+    // Don't allow saving if entry is read-only (submitted or approved)
+    // Rejected entries should be allowed to be saved
+    if (isEntryReadOnly || (currentDraftEntry.status !== 'draft' && currentDraftEntry.status !== 'rejected_by_pm')) {
       toast.error("Cannot save: This entry has been submitted and is read-only");
       return;
     }
@@ -358,8 +360,9 @@ const SupervisorDashboard = () => {
       return;
     }
     
-    // Don't allow submission if entry is read-only (already submitted)
-    if (isEntryReadOnly || currentDraftEntry.status !== 'draft') {
+    // Don't allow submission if entry is read-only (submitted or approved)
+    // Rejected entries should be allowed to be resubmitted
+    if (isEntryReadOnly || (currentDraftEntry.status !== 'draft' && currentDraftEntry.status !== 'rejected_by_pm')) {
       toast.error("Cannot submit: This entry has already been submitted");
       return;
     }
@@ -435,108 +438,195 @@ const SupervisorDashboard = () => {
     // Determine the status based on currentDraftEntry
     const entryStatus = currentDraftEntry?.status || 'draft';
     
+    // Check if entry is rejected and has a rejection reason
+    const isRejected = currentDraftEntry?.isRejected;
+    const rejectionReason = currentDraftEntry?.rejectionReason;
+    
     switch(activeTab) {
       case 'summary':
         return <DPRSummarySection />;
       case 'dp_qty':
         return (
-          <DPQtyTable 
-            data={dpQtyData} 
-            setData={setDpQtyData} 
-            onSave={isEntryReadOnly ? undefined : handleSaveEntry}
-            onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
-            yesterday={yesterday}
-            today={today}
-            isLocked={isEntryReadOnly}
-            status={entryStatus}
-            useMockData={useMockData}
-          />
-        );
-      case 'dp_vendor_block':
-        return (
-          <DPVendorBlockTable 
-            data={dpVendorBlockData} 
-            setData={setDpVendorBlockData} 
-            onSave={isEntryReadOnly ? undefined : handleSaveEntry}
-            onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
-            yesterday={yesterday}
-            today={today}
-            isLocked={isEntryReadOnly}
-            status={entryStatus}
-            useMockData={useMockData}
-          />
-        );
-      case 'manpower_details':
-        return (
-          <ManpowerDetailsTable 
-            data={manpowerDetailsData} 
-            setData={setManpowerDetailsData} 
-            totalManpower={totalManpower}
-            setTotalManpower={setTotalManpower}
-            onSave={isEntryReadOnly ? undefined : handleSaveEntry}
-            onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
-            yesterday={yesterday}
-            today={today}
-            isLocked={isEntryReadOnly}
-            status={entryStatus}
-            useMockData={useMockData}
-          />
-        );
-      case 'dp_block':
-        return (
-          <DPBlockTable 
-            data={dpBlockData} 
-            setData={setDpBlockData} 
-            onSave={isEntryReadOnly ? undefined : handleSaveEntry}
-            onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
-            yesterday={yesterday}
-            today={today}
-            isLocked={isEntryReadOnly}
-            status={entryStatus}
-            useMockData={useMockData}
-          />
-        );
-      case 'dp_vendor_idt':
-        return (
-          <DPVendorIdtTable 
-            data={dpVendorIdtData} 
-            setData={setDpVendorIdtData} 
-            onSave={isEntryReadOnly ? undefined : handleSaveEntry}
-            onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
-            yesterday={yesterday}
-            today={today}
-            isLocked={isEntryReadOnly}
-            status={entryStatus}
-            useMockData={useMockData}
-          />
-        );
-      case 'mms_module_rfi':
-        // Use the new dynamic columns component if we have a project ID and user ID
-        if (currentProjectId && user?.ObjectId) {
-          return (
-            <MmsModuleRfiTableWithDynamicColumns 
-              projectId={currentProjectId}
-              userId={user.ObjectId}
+          <>
+            {isRejected && rejectionReason && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-2 flex-shrink-0" />
+                  <div>
+                    <h4 className="text-red-800 font-medium">Entry Rejected by PM</h4>
+                    <p className="text-red-700 mt-1">Reason: {rejectionReason}</p>
+                    <p className="text-red-600 text-sm mt-2">Please review the feedback and make necessary corrections. You can now edit and resubmit this entry.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <DPQtyTable 
+              data={dpQtyData} 
+              setData={setDpQtyData} 
+              onSave={isEntryReadOnly ? undefined : handleSaveEntry}
+              onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
               yesterday={yesterday}
               today={today}
               isLocked={isEntryReadOnly}
               status={entryStatus}
+              useMockData={useMockData}
             />
-          );
-        }
-        // Fallback to the original component
+          </>
+        );
+      case 'dp_vendor_block':
         return (
-          <MmsModuleRfiTable 
-            data={mmsModuleRfiData} 
-            setData={setMmsModuleRfiData} 
-            onSave={isEntryReadOnly ? undefined : handleSaveEntry}
-            onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
-            yesterday={yesterday}
-            today={today}
-            isLocked={isEntryReadOnly}
-            status={entryStatus}
-            useMockData={useMockData}
-          />
+          <>
+            {isRejected && rejectionReason && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-2 flex-shrink-0" />
+                  <div>
+                    <h4 className="text-red-800 font-medium">Entry Rejected by PM</h4>
+                    <p className="text-red-700 mt-1">Reason: {rejectionReason}</p>
+                    <p className="text-red-600 text-sm mt-2">Please review the feedback and make necessary corrections. You can now edit and resubmit this entry.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <DPVendorBlockTable 
+              data={dpVendorBlockData} 
+              setData={setDpVendorBlockData} 
+              onSave={isEntryReadOnly ? undefined : handleSaveEntry}
+              onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
+              yesterday={yesterday}
+              today={today}
+              isLocked={isEntryReadOnly}
+              status={entryStatus}
+              useMockData={useMockData}
+            />
+          </>
+        );
+      case 'manpower_details':
+        return (
+          <>
+            {isRejected && rejectionReason && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-2 flex-shrink-0" />
+                  <div>
+                    <h4 className="text-red-800 font-medium">Entry Rejected by PM</h4>
+                    <p className="text-red-700 mt-1">Reason: {rejectionReason}</p>
+                    <p className="text-red-600 text-sm mt-2">Please review the feedback and make necessary corrections. You can now edit and resubmit this entry.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <ManpowerDetailsTable 
+              data={manpowerDetailsData} 
+              setData={setManpowerDetailsData} 
+              totalManpower={totalManpower}
+              setTotalManpower={setTotalManpower}
+              onSave={isEntryReadOnly ? undefined : handleSaveEntry}
+              onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
+              yesterday={yesterday}
+              today={today}
+              isLocked={isEntryReadOnly}
+              status={entryStatus}
+              useMockData={useMockData}
+            />
+          </>
+        );
+      case 'dp_block':
+        return (
+          <>
+            {isRejected && rejectionReason && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-2 flex-shrink-0" />
+                  <div>
+                    <h4 className="text-red-800 font-medium">Entry Rejected by PM</h4>
+                    <p className="text-red-700 mt-1">Reason: {rejectionReason}</p>
+                    <p className="text-red-600 text-sm mt-2">Please review the feedback and make necessary corrections. You can now edit and resubmit this entry.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <DPBlockTable 
+              data={dpBlockData} 
+              setData={setDpBlockData} 
+              onSave={isEntryReadOnly ? undefined : handleSaveEntry}
+              onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
+              yesterday={yesterday}
+              today={today}
+              isLocked={isEntryReadOnly}
+              status={entryStatus}
+              useMockData={useMockData}
+            />
+          </>
+        );
+      case 'dp_vendor_idt':
+        return (
+          <>
+            {isRejected && rejectionReason && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-2 flex-shrink-0" />
+                  <div>
+                    <h4 className="text-red-800 font-medium">Entry Rejected by PM</h4>
+                    <p className="text-red-700 mt-1">Reason: {rejectionReason}</p>
+                    <p className="text-red-600 text-sm mt-2">Please review the feedback and make necessary corrections. You can now edit and resubmit this entry.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <DPVendorIdtTable 
+              data={dpVendorIdtData} 
+              setData={setDpVendorIdtData} 
+              onSave={isEntryReadOnly ? undefined : handleSaveEntry}
+              onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
+              yesterday={yesterday}
+              today={today}
+              isLocked={isEntryReadOnly}
+              status={entryStatus}
+              useMockData={useMockData}
+            />
+          </>
+        );
+      case 'mms_module_rfi':
+        return (
+          <>
+            {isRejected && rejectionReason && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-2 flex-shrink-0" />
+                  <div>
+                    <h4 className="text-red-800 font-medium">Entry Rejected by PM</h4>
+                    <p className="text-red-700 mt-1">Reason: {rejectionReason}</p>
+                    <p className="text-red-600 text-sm mt-2">Please review the feedback and make necessary corrections. You can now edit and resubmit this entry.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Use the new dynamic columns component if we have a project ID and user ID */}
+            {currentProjectId && user?.ObjectId ? (
+              <MmsModuleRfiTableWithDynamicColumns 
+                projectId={currentProjectId}
+                userId={user.ObjectId}
+                yesterday={yesterday}
+                today={today}
+                isLocked={isEntryReadOnly}
+                status={entryStatus}
+              />
+            ) : (
+              /* Fallback to the original component */
+              <MmsModuleRfiTable 
+                data={mmsModuleRfiData} 
+                setData={setMmsModuleRfiData} 
+                onSave={isEntryReadOnly ? undefined : handleSaveEntry}
+                onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
+                yesterday={yesterday}
+                today={today}
+                isLocked={isEntryReadOnly}
+                status={entryStatus}
+                useMockData={useMockData}
+              />
+            )}
+          </>
         );
       case 'supervisor_table':
         return (

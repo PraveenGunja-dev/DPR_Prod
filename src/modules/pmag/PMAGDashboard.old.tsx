@@ -44,7 +44,7 @@ import { useNotification } from "@/modules/auth/contexts/NotificationContext";
 import { registerUser } from "@/modules/auth/services/authService";
 import { createProject, assignProjectToSupervisor, assignProjectToMultipleSupervisors, assignProjectsToMultipleSupervisors, getUserProjects } from "@/modules/auth/services/projectService";
 import { getAllSupervisors } from "@/modules/auth/services/authService";
-import { getEntriesForPMAGReview, getEntriesHistoryForPMAG, getArchivedEntriesForPMAG, finalApproveByPMAG, rejectEntryByPMAG } from "@/modules/auth/services/dprSupervisorService";
+import { getEntriesForPMAGReview, getEntriesHistoryForPMAG, getArchivedEntriesForPMAG, finalApproveByPMAG, rejectEntryByPMAG, rejectEntryByPMAGWithoutReason } from "@/modules/auth/services/dprSupervisorService";
 import { toast } from "sonner";
 
 // Import the specialized table components
@@ -272,7 +272,7 @@ const PMAGDashboard = () => {
   // Handle reject by PMAG (send back to PM)
   const handleRejectToPM = async (entryId: number) => {
     try {
-      await rejectEntryByPMAG(entryId);
+      await rejectEntryByPMAGWithoutReason(entryId);
       
       // Find the entry that was rejected to get details for notification
       const entry = approvedEntries.find(e => e.id === entryId);

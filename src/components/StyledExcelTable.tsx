@@ -385,12 +385,17 @@ export const StyledExcelTable = ({
                           }),
                           ...(rowIndex === headerStructure.length - 1 && cellIndex > 0 && cellIndex < headerRow.length - 1 && {
                             borderBottom: "1px dashed #999999", // Dashed bottom border for bottom middle cells
+                            borderTop: "1px dashed #999999", // Dashed top border for bottom middle cells
                           }),
                           ...(cellIndex === 0 && rowIndex > 0 && rowIndex < headerStructure.length - 1 && {
                             borderLeft: "2px solid #999999", // Thick left border for left middle cells
+                            borderTop: "1px dashed #999999", // Dashed top border for left middle cells
+                            borderBottom: "1px dashed #999999", // Dashed bottom border for left middle cells
                           }),
                           ...(cellIndex === headerRow.length - 1 && rowIndex > 0 && rowIndex < headerStructure.length - 1 && {
                             borderRight: "2px solid #999999", // Thick right border for right middle cells
+                            borderTop: "1px dashed #999999", // Dashed top border for right middle cells
+                            borderBottom: "1px dashed #999999", // Dashed bottom border for right middle cells
                           }),
                           ...(cellIndex > 0 && cellIndex < headerRow.length - 1 && rowIndex > 0 && rowIndex < headerStructure.length - 1 && {
                             borderTop: "1px dashed #999999",
@@ -443,6 +448,8 @@ export const StyledExcelTable = ({
                         ...(i > 0 && i < filteredColumns.length - 1 && {
                           borderTop: "2px solid #999999", // Thick top border for middle cells
                           borderBottom: "1px dashed #999999", // Dashed bottom border for middle cells
+                          borderLeft: "1px dashed #999999", // Dashed left border for middle cells
+                          borderRight: "1px dashed #999999", // Dashed right border for middle cells
                         }),
                       }}
                     >
@@ -502,15 +509,28 @@ export const StyledExcelTable = ({
                             }),
                             ...(r === 0 && i > 0 && i < filteredColumns.length - 1 && {
                               borderTop: "1px dashed #999999", // Dashed top border for top middle cells
+                              borderBottom: "1px dashed #999999", // Dashed bottom border for top middle cells
+                              borderLeft: "1px dashed #999999", // Dashed left border for top middle cells
+                              borderRight: "1px dashed #999999", // Dashed right border for top middle cells
                             }),
                             ...(r === data.length - 1 && i > 0 && i < filteredColumns.length - 1 && {
                               borderBottom: "2px solid #999999", // Thick bottom border for bottom middle cells
+                              borderTop: "1px dashed #999999", // Dashed top border for bottom middle cells
+                              borderLeft: "1px dashed #999999", // Dashed left border for bottom middle cells
+                              borderRight: "1px dashed #999999", // Dashed right border for bottom middle cells
                             }),
                             ...(i === 0 && r > 0 && r < data.length - 1 && {
                               borderLeft: "2px solid #999999", // Thick left border for left middle cells
+                              borderTop: "1px dashed #999999", // Dashed top border for left middle cells
+                              borderBottom: "1px dashed #999999", // Dashed bottom border for left middle cells
                             }),
                             ...(i === filteredColumns.length - 1 && r > 0 && r < data.length - 1 && {
                               borderRight: "2px solid #999999", // Thick right border for right middle cells
+                              borderTop: "1px dashed #999999", // Dashed top border for right middle cells
+                              borderBottom: "1px dashed #999999", // Dashed bottom border for right middle cells
+                            }),
+                            ...(r > 0 && r < data.length - 1 && i > 0 && i < filteredColumns.length - 1 && {
+                              border: "1px dashed #999999", // Dashed borders for middle cells
                             }),
                           } : 
                           {
@@ -534,15 +554,28 @@ export const StyledExcelTable = ({
                             }),
                             ...(r === 0 && i > 0 && i < filteredColumns.length - 1 && {
                               borderTop: "1px dashed #999999", // Dashed top border for top middle cells
+                              borderBottom: "1px dashed #999999", // Dashed bottom border for top middle cells
+                              borderLeft: "1px dashed #999999", // Dashed left border for top middle cells
+                              borderRight: "1px dashed #999999", // Dashed right border for top middle cells
                             }),
                             ...(r === data.length - 1 && i > 0 && i < filteredColumns.length - 1 && {
                               borderBottom: "2px solid #999999", // Thick bottom border for bottom middle cells
+                              borderTop: "1px dashed #999999", // Dashed top border for bottom middle cells
+                              borderLeft: "1px dashed #999999", // Dashed left border for bottom middle cells
+                              borderRight: "1px dashed #999999", // Dashed right border for bottom middle cells
                             }),
                             ...(i === 0 && r > 0 && r < data.length - 1 && {
                               borderLeft: "2px solid #999999", // Thick left border for left middle cells
+                              borderTop: "1px dashed #999999", // Dashed top border for left middle cells
+                              borderBottom: "1px dashed #999999", // Dashed bottom border for left middle cells
                             }),
                             ...(i === filteredColumns.length - 1 && r > 0 && r < data.length - 1 && {
                               borderRight: "2px solid #999999", // Thick right border for right middle cells
+                              borderTop: "1px dashed #999999", // Dashed top border for right middle cells
+                              borderBottom: "1px dashed #999999", // Dashed bottom border for right middle cells
+                            }),
+                            ...(r > 0 && r < data.length - 1 && i > 0 && i < filteredColumns.length - 1 && {
+                              border: "1px dashed #999999", // Dashed borders for middle cells
                             }),
                           }
                       }

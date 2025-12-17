@@ -299,111 +299,13 @@ export function MmsModuleRfiTableWithDynamicColumns({
   return (
     <div className="space-y-4 w-full">
       <div className="bg-muted p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-        <div className="flex justify-between items-center">
-          <div>
-            <h3 className="font-bold text-base mb-1">MMS & Module RFI</h3>
-            <p className="text-xs">Reporting Date: {today}</p>
-          </div>
-          <Dialog open={isManageColumnsOpen} onOpenChange={setIsManageColumnsOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm" disabled={isLocked}>
-                <Edit className="mr-2 h-4 w-4" /> Manage Columns
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Manage Dynamic Columns</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="columnName">Column Name</Label>
-                  <Input
-                    id="columnName"
-                    value={newColumn.columnName}
-                    onChange={(e) => setNewColumn({...newColumn, columnName: e.target.value})}
-                    placeholder="Internal column name (e.g., 'priority')"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="displayName">Display Name</Label>
-                  <Input
-                    id="displayName"
-                    value={newColumn.displayName}
-                    onChange={(e) => setNewColumn({...newColumn, displayName: e.target.value})}
-                    placeholder="Display name (e.g., 'Priority')"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="dataType">Data Type</Label>
-                  <select
-                    id="dataType"
-                    className="w-full p-2 border rounded"
-                    value={newColumn.dataType}
-                    onChange={(e) => setNewColumn({...newColumn, dataType: e.target.value})}
-                  >
-                    <option value="text">Text</option>
-                    <option value="number">Number</option>
-                    <option value="date">Date</option>
-                    <option value="boolean">Boolean</option>
-                  </select>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="isRequired"
-                    checked={newColumn.isRequired}
-                    onChange={(e) => setNewColumn({...newColumn, isRequired: e.target.checked})}
-                  />
-                  <Label htmlFor="isRequired">Required</Label>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="defaultValue">Default Value</Label>
-                  <Input
-                    id="defaultValue"
-                    value={newColumn.defaultValue}
-                    onChange={(e) => setNewColumn({...newColumn, defaultValue: e.target.value})}
-                    placeholder="Default value (optional)"
-                  />
-                </div>
-                <div className="flex justify-end space-x-2">
-                  <Button variant="outline" onClick={() => setIsManageColumnsOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleAddColumn}>
-                    <Plus className="mr-2 h-4 w-4" /> Add Column
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+        <div>
+          <h3 className="font-bold text-base mb-1">MMS & Module RFI</h3>
+          <p className="text-xs">Reporting Date: {today}</p>
         </div>
       </div>
 
-      {dynamicColumns.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Dynamic Columns</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {dynamicColumns.map((column) => (
-                <div key={column.id} className="flex items-center bg-gray-100 rounded px-3 py-1">
-                  <span className="text-sm">{column.display_name}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="ml-2 h-4 w-4 p-0"
-                    onClick={() => handleRemoveColumn(column.id)}
-                    disabled={isLocked}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+
 
       <StyledExcelTable
         title="MMS & Module RFI Table"

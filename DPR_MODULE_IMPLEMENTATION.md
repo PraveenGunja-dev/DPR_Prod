@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS dpr_supervisor_entries (
     previous_date DATE NOT NULL,
     data_json JSONB NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'submitted_to_pm', 'approved_by_pm', 'rejected_by_pm')),
+    rejection_reason TEXT,
     submitted_at TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

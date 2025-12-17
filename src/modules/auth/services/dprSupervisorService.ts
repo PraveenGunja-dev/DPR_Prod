@@ -122,9 +122,17 @@ export const updateEntryByPM = async (entryId: number, data: any) => {
   return response.data;
 };
 
-export const rejectEntryByPM = async (entryId: number) => {
+export const rejectEntryByPM = async (entryId: number, rejectionReason?: string) => {
   const response = await axios.post(`${API_URL}/api/dpr-supervisor/pm/reject`, 
-    { entryId },
+    { entryId, rejectionReason },
+    { headers: getAuthHeader() }
+  );
+  return response.data;
+};
+
+export const rejectEntryByPMAG = async (entryId: number, rejectionReason?: string) => {
+  const response = await axios.post(`${API_URL}/api/dpr-supervisor/pmag/reject`, 
+    { entryId, rejectionReason },
     { headers: getAuthHeader() }
   );
   return response.data;
@@ -177,7 +185,7 @@ export const finalApproveByPMAG = async (entryId: number) => {
   return response.data;
 };
 
-export const rejectEntryByPMAG = async (entryId: number) => {
+export const rejectEntryByPMAGWithoutReason = async (entryId: number) => {
   const response = await axios.post(`${API_URL}/api/dpr-supervisor/pmag/reject`, 
     { entryId },
     { headers: getAuthHeader()

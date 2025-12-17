@@ -52,9 +52,9 @@ export const finalApproveEntry = async (entryId: number) => {
 };
 
 // Reject entry by PMAG
-export const rejectEntry = async (entryId: number) => {
+export const rejectEntry = async (entryId: number, rejectionReason?: string) => {
   try {
-    await rejectEntryByPMAG(entryId);
+    await rejectEntryByPMAG(entryId, rejectionReason);
     handleApiSuccess("Entry rejected and sent back to PM");
   } catch (error: any) {
     handleApiError(error, "Failed to reject entry");

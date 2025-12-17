@@ -25,7 +25,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   DPQtyTable,
   DPVendorBlockTable,
@@ -36,13 +35,20 @@ import {
 } from "@/modules/supervisor/components";
 import { getTodayAndYesterday } from "@/modules/auth/services/dprSupervisorService";
 import { StyledExcelTable } from "@/components/StyledExcelTable";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface PMSheetEntriesProps {
   submittedEntries: any[];
   loading: boolean;
   onRefresh: () => void;
   onApprove: (entryId: number) => void;
-  onReject: (entryId: number) => void;
+  onReject: (entryId: number, sheetType: string) => void;
   onEditEntry: (entry: any) => void;
   onUpdateEntry: (entryId: number, data: any) => void;
   onSaveEntry: (entryId: number, data: any) => void;
@@ -204,9 +210,10 @@ export const PMSheetEntries: React.FC<PMSheetEntriesProps> = ({
                             e.stopPropagation();
                             onEditEntry(entry);
                           }}
-                          className="transition-colors duration-200 px-2 py-1 h-7"
+                          className="transition-colors duration-200 px-3 py-1 h-8 flex items-center gap-1"
                         >
-                          <Edit className="w-3 h-3" />
+                          <Edit className="w-4 h-4" />
+                          <span>Edit</span>
                         </Button>
                         <Button 
                           size="sm" 
@@ -215,27 +222,29 @@ export const PMSheetEntries: React.FC<PMSheetEntriesProps> = ({
                             e.stopPropagation();
                             onApprove(entry.id);
                           }}
-                          className="bg-green-600 hover:bg-green-700 transition-colors duration-200 px-2 py-1 h-7"
+                          className="bg-green-600 hover:bg-green-700 transition-colors duration-200 px-3 py-1 h-8 flex items-center gap-1"
                         >
-                          <Check className="w-3 h-3" />
+                          <Check className="w-4 h-4" />
+                          <span>Approve</span>
                         </Button>
                         <Button 
                           size="sm" 
                           variant="destructive"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onReject(entry.id);
+                            onReject(entry.id, sheetType);
                           }}
-                          className="transition-colors duration-200 px-2 py-1 h-7"
+                          className="transition-colors duration-200 px-3 py-1 h-8 flex items-center gap-1"
                         >
-                          <X className="w-3 h-3" />
+                          <X className="w-4 h-4" />
+                          <span>Reject</span>
                         </Button>
                       </>
                     )}
                     {entry.status === "approved_by_pm" && (
-                      <Badge variant="outline" className="text-green-600 border-green-600 px-2 py-0.5 text-xs font-medium">
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Sent to PMAG
+                      <Badge variant="outline" className="text-green-600 border-green-600 px-3 py-1 text-xs font-medium flex items-center gap-1">
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Sent to PMAG</span>
                       </Badge>
                     )}
                     {isExpanded ? (
@@ -402,10 +411,10 @@ export const PMSheetEntries: React.FC<PMSheetEntriesProps> = ({
                                 onClick={toggleFullscreen}
                                 variant="outline"
                                 size="sm"
-                                className="text-xs"
+                                className="flex items-center gap-1 text-xs"
                               >
-                                <Maximize className="w-3 h-3 mr-1" />
-                                View Fullscreen ({entryData.rows.length} rows)
+                                <Maximize className="w-3 h-3" />
+                                <span>View Fullscreen ({entryData.rows.length} rows)</span>
                               </Button>
                             </div>
                           )}
@@ -438,14 +447,14 @@ export const PMSheetEntries: React.FC<PMSheetEntriesProps> = ({
       whileHover={{ y: -2 }}
     >
       <Card className="p-6 shadow-md hover:shadow-lg transition-shadow duration-300 rounded-xl">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
           <div>
             <h3 className="text-xl font-bold">Submitted Sheets - Review Queue</h3>
             <p className="text-sm text-muted-foreground mt-1">
               Viewing all submissions from all projects
             </p>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
             <motion.div
               whileTap={{ scale: 0.95 }}
               whileHover={{ scale: 1.05 }}
@@ -461,8 +470,8 @@ export const PMSheetEntries: React.FC<PMSheetEntriesProps> = ({
                 Refresh
               </Button>
             </motion.div>
-            <Badge variant="secondary">{submittedEntries.filter(e => e.status === 'submitted_to_pm').length} Pending</Badge>
-            <Badge variant="outline">{submittedEntries.length} Total</Badge>
+            <Badge variant="secondary" className="text-xs py-1 px-2">{submittedEntries.filter(e => e.status === 'submitted_to_pm').length} Pending</Badge>
+            <Badge variant="outline" className="text-xs py-1 px-2">{submittedEntries.length} Total</Badge>
           </div>
         </div>
         
@@ -510,62 +519,85 @@ export const PMSheetEntries: React.FC<PMSheetEntriesProps> = ({
             </div>
           </motion.div>
         ) : (
-          <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
+          <div className="w-full">
             <motion.div 
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6"
             >
-              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-6 mb-6 gap-0">
-                {sheetTypes.map((sheet, index) => {
-                  const Icon = sheet.icon;
-                  const count = getEntriesBySheetType(sheet.value).length;
-                  return (
-                    <motion.div
-                      key={sheet.value}
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.05, duration: 0.2 }}
-                    >
-                      <TabsTrigger 
-                        value={sheet.value} 
-                        className="flex items-center justify-center w-full data-[state=active]:bg-primary data-[state=active]:text-primary-foreground py-2 px-1 border border-transparent data-[state=active]:border-primary data-[state=active]:shadow"
-                      >
-                        <Icon className="w-4 h-4 mr-2" />
-                        <span className="hidden sm:inline">{sheet.label}</span>
-                        <span className="sm:hidden">{sheet.label.split(' ')[0]}</span>
-                        {count > 0 && (
-                          <Badge variant="secondary" className="ml-2">{count}</Badge>
-                        )}
-                      </TabsTrigger>
-                    </motion.div>
-                  );
-                })}
-              </TabsList>
+              <div>
+                <h3 className="text-lg font-semibold">Select Sheet Type</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Choose the type of sheet to review
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Select value={activeTab} onValueChange={onTabChange}>
+                  <SelectTrigger className="w-[200px] sm:w-[250px]">
+                    <div className="flex items-center">
+                      {sheetTypes.map(sheet => {
+                        if (sheet.value === activeTab) {
+                          const Icon = sheet.icon;
+                          const count = getEntriesBySheetType(sheet.value).length;
+                          return (
+                            <React.Fragment key={sheet.value}>
+                              <Icon className="w-4 h-4 mr-2" />
+                              <span>{sheet.label}</span>
+                              {count > 0 && (
+                                <Badge variant="secondary" className="ml-2 text-xs py-0.5 px-1.5">
+                                  {count}
+                                </Badge>
+                              )}
+                            </React.Fragment>
+                          );
+                        }
+                        return null;
+                      })}
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sheetTypes.map((sheet) => {
+                      const Icon = sheet.icon;
+                      const count = getEntriesBySheetType(sheet.value).length;
+                      return (
+                        <SelectItem key={sheet.value} value={sheet.value}>
+                          <div className="flex items-center justify-between w-full">
+                            <div className="flex items-center">
+                              <Icon className="w-4 h-4 mr-2" />
+                              <span>{sheet.label}</span>
+                            </div>
+                            {count > 0 && (
+                              <Badge variant="secondary" className="ml-2 text-xs py-0.5 px-1.5">
+                                {count}
+                              </Badge>
+                            )}
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
             </motion.div>
 
             <AnimatePresence mode="wait">
-              {sheetTypes.map((sheet, index) => (
-                sheet.value === activeTab && (
-                  <TabsContent key={sheet.value} value={sheet.value}>
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ 
-                        duration: 0.3,
-                        delay: 0.1
-                      }}
-                      className="w-full"
-                      key={activeTab}
-                      exit={{ opacity: 0, y: -20 }}
-                    >
-                      {renderSheetEntries(sheet.value)}
-                    </motion.div>
-                  </TabsContent>
-                )
-              ))}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ 
+                  duration: 0.3,
+                  delay: 0.1
+                }}
+                className="w-full"
+                key={activeTab}
+                exit={{ opacity: 0, y: -20 }}
+              >
+                {renderSheetEntries(activeTab)}
+              </motion.div>
             </AnimatePresence>
-          </Tabs>
+          </div>
         )}
       </Card>
     </motion.div>

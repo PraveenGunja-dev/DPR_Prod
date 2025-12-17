@@ -110,6 +110,7 @@ const ProjectsPage = () => {
         break;
         
       case "Site PM":
+        // For Site PM, we want to go to their dashboard but with project context
         navigate("/sitepm", { 
           state: { 
             user,

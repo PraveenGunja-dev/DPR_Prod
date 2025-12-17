@@ -42,13 +42,14 @@ export const handleFinalApprove = async (entryId: number) => {
   }
 };
 
-// Handle reject by PMRG (send back to PM)
-export const handleRejectToPM = async (entryId: number) => {
+// Handle reject by PMRG
+export const handleRejectToPM = async (entryId: number, rejectionReason?: string) => {
   try {
-    await rejectEntryByPMAG(entryId);
+    await rejectEntryByPMAG(entryId, rejectionReason);
     return true;
   } catch (error) {
     console.error('Error rejecting entry to PM:', error);
     throw error;
   }
 };
+

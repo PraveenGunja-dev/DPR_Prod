@@ -13,7 +13,8 @@ import {
   PMEditEntryModal,
   PMCreateSupervisorModal,
   PMAssignProjectModal,
-  PMSuccessModal
+  PMSuccessModal,
+  PMRejectReasonModal
 } from "./components";
 import { 
   fetchSubmittedEntries,
@@ -127,18 +128,32 @@ const PMDashboard = () => {
     }
   };
 
+  // State for rejection reason modal
+  const [showRejectReasonModal, setShowRejectReasonModal] = useState(false);
+  const [rejectingEntryId, setRejectingEntryId] = useState<number | null>(null);
+  const [rejectingEntrySheetType, setRejectingEntrySheetType] = useState<string>('');
+
   // Handle reject entry
-  const handleReject = async (entryId: number) => {
+  const handleReject = async (entryId: number, sheetType: string) => {
+    setRejectingEntryId(entryId);
+    setRejectingEntrySheetType(sheetType);
+    setShowRejectReasonModal(true);
+  };
+
+  // Handle confirm reject with reason
+  const handleConfirmReject = async (rejectionReason: string) => {
+    if (!rejectingEntryId) return;
+    
     try {
-      await rejectEntry(entryId);
+      await rejectEntry(rejectingEntryId, rejectionReason);
       
       // Find the entry that was rejected to get details for notification
-      const entry = submittedEntries.find(e => e.id === entryId);
+      const entry = submittedEntries.find(e => e.id === rejectingEntryId);
       if (entry) {
         // Add notification for rejection
         addNotification({
           title: "Sheet Rejected",
-          message: `The ${entry.sheet_type.replace(/_/g, ' ')} sheet from ${entry.supervisor_name || 'a supervisor'} has been rejected and sent back for revision.`,
+          message: `The ${entry.sheet_type.replace(/_/g, ' ')} sheet from ${entry.supervisor_name || 'a supervisor'} has been rejected and sent back for revision. Reason: ${rejectionReason}`,
           type: "warning",
           userId: user?.ObjectId,
           projectId: entry.project_id,
@@ -152,6 +167,11 @@ const PMDashboard = () => {
       await fetchEntries();
     } catch (error) {
       toast.error(`Failed to reject entry: ${(error as Error).message || 'Unknown error'}`);
+    } finally {
+      // Reset rejection state
+      setRejectingEntryId(null);
+      setRejectingEntrySheetType('');
+      setShowRejectReasonModal(false);
     }
   };
 
@@ -330,12 +350,24 @@ const PMDashboard = () => {
         supervisors={supervisors}
         onAssignmentComplete={handleAssignmentComplete}
       />
-
+    
       <PMSuccessModal
         isOpen={showSuccessModal}
         onClose={() => setShowSuccessModal(false)}
         registeredUser={registeredUser}
         projects={projects}
+      />
+    
+      <PMRejectReasonModal
+        isOpen={showRejectReasonModal}
+        onClose={() => {
+          setShowRejectReasonModal(false);
+          setRejectingEntryId(null);
+          setRejectingEntrySheetType('');
+        }}
+        onConfirm={handleConfirmReject}
+        entryId={rejectingEntryId || 0}
+        sheetType={rejectingEntrySheetType}
       />
     </motion.div>
   );

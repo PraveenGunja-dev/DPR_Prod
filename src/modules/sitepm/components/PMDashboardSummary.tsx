@@ -66,12 +66,6 @@ export const PMDashboardSummary: React.FC<PMDashboardSummaryProps> = ({
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.2 }}
         >
-          <div className="bg-primary/10 px-4 py-2 rounded-lg">
-            <div className="flex items-center">
-              <FileText className="w-5 h-5 text-primary mr-2" />
-              <span className="font-medium">Validation Dashboard</span>
-            </div>
-          </div>
         </motion.div>
       </div>
 

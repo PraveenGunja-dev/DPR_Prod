@@ -405,10 +405,16 @@ export const Navbar = ({ userName, userRole, projectName, onAddUser, onAddProjec
                       </DropdownMenuItem>
                     )}
                     {displayRole === "Site PM" && (
-                      <DropdownMenuItem onClick={handleAddUser}>
-                        <Users className="mr-2 h-4 w-4" />
-                        <span>Add Supervisor</span>
-                      </DropdownMenuItem>
+                      <>
+                        <DropdownMenuItem onClick={handleAddUser}>
+                          <Users className="mr-2 h-4 w-4" />
+                          <span>Add Supervisor</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleAssignProject}>
+                          <UserPlus className="mr-2 h-4 w-4" />
+                          <span>Assign Project</span>
+                        </DropdownMenuItem>
+                      </>
                     )}
                     {displayRole === "PMAG" && (
                       <>

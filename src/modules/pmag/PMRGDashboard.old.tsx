@@ -39,7 +39,7 @@ import { useNotification } from "@/modules/auth/contexts/NotificationContext";
 import { registerUser } from "@/modules/auth/services/authService";
 import { createProject, assignProjectToSupervisor, getUserProjects } from "@/modules/auth/services/projectService";
 import { getAllSupervisors } from "@/modules/auth/services/authService";
-import { getEntriesForPMAGReview, finalApproveByPMAG, rejectEntryByPMAG } from "@/modules/auth/services/dprSupervisorService";
+import { getEntriesForPMAGReview, finalApproveByPMAG, rejectEntryByPMAG, rejectEntryByPMAGWithoutReason } from "@/modules/auth/services/dprSupervisorService";
 import { toast } from "sonner";
 
 // Function to format date as YYYY-MM-DD
@@ -192,7 +192,7 @@ const PMAGDashboard = () => {
   // Handle reject by PMAG (send back to PM)
   const handleRejectToPM = async (entryId: number) => {
     try {
-      await rejectEntryByPMAG(entryId);
+      await rejectEntryByPMAGWithoutReason(entryId);
       
       // Find the entry that was rejected to get details for notification
       const entry = approvedEntries.find(e => e.id === entryId);

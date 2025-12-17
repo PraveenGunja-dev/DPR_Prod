@@ -1,6 +1,7 @@
 // server/controllers/dprSupervisorController.js
 const pool = require('../db');
 const { cache } = require('../cache/redisClient');
+const { createSystemLog } = require('../utils/systemLogger');
 
 // Helper function to get today and yesterday dates
 const getTodayAndYesterday = () => {
@@ -49,7 +50,8 @@ const getDraftEntry = async (req, res) => {
       const rejectedEntry = {
         ...result.rows[0],
         isRejected: true,
-        rejectionMessage: 'This entry was rejected by PM. Please review and resubmit.'
+        rejectionMessage: 'This entry was rejected by PM. Please review and resubmit.',
+        rejectionReason: result.rows[0].rejection_reason || null
       };
       return res.status(200).json(rejectedEntry);
     }
@@ -253,13 +255,14 @@ const saveDraftEntry = async (req, res) => {
     const { entryId, data } = req.body;
 
     // Verify ownership
+    // Allow saving of both draft and rejected entries
     const checkResult = await pool.query(
-      'SELECT * FROM dpr_supervisor_entries WHERE id = $1 AND supervisor_id = $2 AND status = $3',
-      [entryId, userId, 'draft']
+      'SELECT * FROM dpr_supervisor_entries WHERE id = $1 AND supervisor_id = $2 AND status IN ($3, $4)',
+      [entryId, userId, 'draft', 'rejected_by_pm']
     );
 
     if (checkResult.rows.length === 0) {
-      return res.status(404).json({ message: 'Draft entry not found or access denied' });
+      return res.status(404).json({ message: 'Entry not found, access denied, or invalid status for saving' });
     }
 
     // Update entry data
@@ -287,14 +290,15 @@ const submitEntry = async (req, res) => {
     console.log(`Supervisor ${userId} attempting to submit entry ${entryId}`);
 
     // Verify ownership and status
+    // Allow submission of both draft and rejected entries
     const checkResult = await pool.query(
-      'SELECT * FROM dpr_supervisor_entries WHERE id = $1 AND supervisor_id = $2 AND status = $3',
-      [entryId, userId, 'draft']
+      'SELECT * FROM dpr_supervisor_entries WHERE id = $1 AND supervisor_id = $2 AND status IN ($3, $4)',
+      [entryId, userId, 'draft', 'rejected_by_pm']
     );
 
     if (checkResult.rows.length === 0) {
       console.log(`Entry ${entryId} not found or already submitted`);
-      return res.status(404).json({ message: 'Draft entry not found or already submitted' });
+      return res.status(404).json({ message: 'Entry not found, access denied, or invalid status for submission' });
     }
 
     // Update status to submitted_to_pm
@@ -456,19 +460,19 @@ const rejectEntryByPM = async (req, res) => {
   try {
     const userId = req.user.userId;
     const userRole = req.user.role;
-    const { entryId } = req.body;
+    const { entryId, rejectionReason } = req.body;
 
     if (userRole !== 'Site PM') {
       return res.status(403).json({ message: 'Only PM can reject entries' });
     }
 
-    // Update status to rejected_by_pm
+    // Update status to rejected_by_pm and store rejection reason
     const result = await pool.query(
       `UPDATE dpr_supervisor_entries 
-       SET status = 'rejected_by_pm', updated_at = CURRENT_TIMESTAMP
+       SET status = 'rejected_by_pm', rejection_reason = $2, updated_at = CURRENT_TIMESTAMP
        WHERE id = $1 AND status = 'submitted_to_pm'
        RETURNING *`,
-      [entryId]
+      [entryId, rejectionReason || null]
     );
 
     if (result.rows.length === 0) {
@@ -479,13 +483,12 @@ const rejectEntryByPM = async (req, res) => {
     await cache.flushAll();
 
     // Log entry rejection
-    const { createSystemLog } = require('../utils/systemLogger');
     const entry = result.rows[0];
     await createSystemLog(
       'SHEET_REJECTED',
       userId,
       `Entry: ${entryId}, Project: ${entry.project_id}, Type: ${entry.sheet_type}`,
-      `Entry ${entryId} (${entry.sheet_type}) rejected by PM`
+      `Entry ${entryId} (${entry.sheet_type}) rejected by PM. Reason: ${rejectionReason || 'No reason provided'}`
     );
 
     res.status(200).json({ message: 'Entry rejected and sent back to Supervisor', entry: result.rows[0] });
@@ -701,19 +704,19 @@ const rejectEntryByPMAG = async (req, res) => {
   try {
     const userId = req.user.userId;
     const userRole = req.user.role;
-    const { entryId } = req.body;
+    const { entryId, rejectionReason } = req.body;
 
     if (userRole !== 'PMAG') {
       return res.status(403).json({ message: 'Only PMAG can reject entries' });
     }
 
-    // Update status back to submitted_to_pm
+    // Update status back to submitted_to_pm and store rejection reason
     const result = await pool.query(
       `UPDATE dpr_supervisor_entries 
-       SET status = 'submitted_to_pm', updated_at = CURRENT_TIMESTAMP
+       SET status = 'submitted_to_pm', rejection_reason = $2, updated_at = CURRENT_TIMESTAMP
        WHERE id = $1 AND status = 'approved_by_pm'
        RETURNING *`,
-      [entryId]
+      [entryId, rejectionReason || null]
     );
 
     if (result.rows.length === 0) {

@@ -34,9 +34,9 @@ export const approveEntry = async (entryId: number) => {
 };
 
 // Reject entry by PM
-export const rejectEntry = async (entryId: number) => {
+export const rejectEntry = async (entryId: number, rejectionReason?: string) => {
   try {
-    await rejectEntryByPM(entryId);
+    await rejectEntryByPM(entryId, rejectionReason);
   } catch (error) {
     console.error(`Failed to reject entry ${entryId}:`, error);
     throw new Error(`Failed to reject entry: ${(error as Error).message || 'Unknown error'}`);
