@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import React from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Maximize, Minimize, Save } from "lucide-react";
+import { Maximize, Minimize, Save, Search } from "lucide-react";
 import { StatusChip } from "./StatusChip";
 import "@/index.css";
 
@@ -28,6 +28,8 @@ export const StyledExcelTable = ({
   const filteredColumns = columns.filter((c) => !excludeColumns.includes(c));
   const [activeCell, setActiveCell] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [filters, setFilters] = useState({}); // State for column filters
+  const [showFilters, setShowFilters] = useState(false); // Toggle filter row visibility
 
   // Excel Themes
   const excelThemes = {
@@ -40,6 +42,7 @@ export const StyledExcelTable = ({
       activeBorder: "#217346",
       hoverBg: "#EAF2FB",
       statusBg: "#F4F4F4",
+      filterBg: "#E6E6E6",
     },
     dark: {
       bg: "#1E1E1E",
@@ -50,6 +53,7 @@ export const StyledExcelTable = ({
       activeBorder: "#2EA3F2",
       hoverBg: "#2E3238",
       statusBg: "#252525",
+      filterBg: "#333333",
     },
   };
 
@@ -74,10 +78,17 @@ export const StyledExcelTable = ({
     return () => observer.disconnect();
   }, []);
 
-  // Populate filter options with unique values from each column
-  useEffect(() => {
-    // Filter functionality removed as per user request
-  }, [data, filteredColumns, columns]);
+  // Filter the data based on active filters
+  const filteredData = data.filter(row => {
+    return filteredColumns.every(col => {
+      const filterValue = filters[col];
+      if (!filterValue) return true; // No filter for this column
+      
+      const colIndex = columns.indexOf(col);
+      const cellValue = row[colIndex]?.toString().toLowerCase() || "";
+      return cellValue.includes(filterValue.toLowerCase());
+    });
+  });
 
   const handleCellChange = (row, col, value) => {
     const cName = columns[col];
@@ -96,6 +107,19 @@ export const StyledExcelTable = ({
   };
 
   const toggleFullscreen = () => setIsFullscreen(!isFullscreen);
+
+  // Handle filter change
+  const handleFilterChange = (column, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [column]: value
+    }));
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setFilters({});
+  };
 
   // Helper function to clean header labels by removing tags like (p6), (edit), (user), etc.
   // and applying abbreviations for common terms
@@ -238,7 +262,7 @@ export const StyledExcelTable = ({
             >
               {title}
             </h3>
-            <span style={{ color: T.headerText, fontSize: "8px" }}>({data.length} rows)</span>
+            <span style={{ color: T.headerText, fontSize: "8px" }}>({filteredData.length} of {data.length} rows)</span>
 
             {status !== "draft" && <StatusChip status={status} />}
           </div>
@@ -268,6 +292,27 @@ export const StyledExcelTable = ({
               </Button>
             )}
 
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={() => setShowFilters(!showFilters)}
+              className={showFilters ? "bg-primary/10" : ""}
+            >
+              <Search className="w-4 h-4 mr-1" />
+              Filters
+            </Button>
+
+            {showFilters && Object.keys(filters).some(key => filters[key]) && (
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={clearFilters}
+                className="bg-destructive/10 text-destructive"
+              >
+                Clear Filters
+              </Button>
+            )}
+
             <Button size="sm" variant="outline" onClick={toggleFullscreen}>
               <Maximize className="w-4 h-4 mr-1" />
               Fullscreen
@@ -290,7 +335,7 @@ export const StyledExcelTable = ({
               {title}
             </h2>
             <p style={{ color: T.headerText, fontSize: "8px" }}>
-              {data.length} rows × {columns.length} columns
+              {filteredData.length} of {data.length} rows × {columns.length} columns
             </p>
           </div>
 
@@ -309,6 +354,26 @@ export const StyledExcelTable = ({
                 }}
               >
                 Submit
+              </Button>
+            )}
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={() => setShowFilters(!showFilters)}
+              className={showFilters ? "bg-primary/10" : ""}
+            >
+              <Search className="w-4 h-4 mr-1" />
+              Filters
+            </Button>
+
+            {showFilters && Object.keys(filters).some(key => filters[key]) && (
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={clearFilters}
+                className="bg-destructive/10 text-destructive"
+              >
+                Clear Filters
               </Button>
             )}
             <Button size="sm" variant="outline" onClick={toggleFullscreen}>
@@ -339,130 +404,219 @@ export const StyledExcelTable = ({
             top: 0,
             zIndex: 10,
           }}>
+            {/* Conditional rendering for header structure */}
             {headerStructure && headerStructure.length > 0 ? (
-              // Render multi-row headers if headerStructure is provided
-              headerStructure.map((headerRow, rowIndex) => (
-                <tr key={rowIndex}>
-                  {headerRow.map((headerCell, cellIndex) => {
-                    // Apply special text colors based on header content
+              <>
+                {/* Render multi-row headers if headerStructure is provided */}
+                {headerStructure.map((headerRow, rowIndex) => (
+                  <tr key={rowIndex}>
+                    {headerRow.map((headerCell, cellIndex) => {
+                      // Apply special text colors based on header content
+                      let textColor = T.headerText;
+                      const headerLabel = typeof headerCell === 'string' ? headerCell : headerCell.label;
+                      if (headerLabel.includes("Catch Up Plan")) {
+                        textColor = "#0000FF"; // Blue for "Catch Up Plan"
+                      } else if (headerLabel.includes("% Status")) {
+                        textColor = "#008000"; // Green for "% Status"
+                      } else if (headerLabel.includes("Deviation Plan vs Actual")) {
+                        textColor = "#FF0000"; // Red for "Deviation Plan vs Actual"
+                      }
+                      
+                      return (
+                        <th 
+                          key={cellIndex}
+                          style={{
+                            ...excelHeaderStyle(headerCell, rowIndex),
+                            color: textColor,
+                            position: "sticky",
+                            top: 0,
+                            zIndex: 11,
+                            ...(rowIndex === 0 && cellIndex === 0 && {
+                              borderLeft: "2px solid #999999", // Thick left border for top-left cell
+                              borderTop: "2px solid #999999", // Thick top border for top-left cell
+                            }),
+                            ...(rowIndex === 0 && cellIndex === headerRow.length - 1 && {
+                              borderRight: "2px solid #999999", // Thick right border for top-right cell
+                              borderTop: "2px solid #999999", // Thick top border for top-right cell
+                            }),
+                            ...(rowIndex === headerStructure.length - 1 && cellIndex === 0 && {
+                              borderLeft: "2px solid #999999", // Thick left border for bottom-left cell
+                              borderBottom: "1px dashed #999999", // Dashed bottom border for bottom-left cell
+                            }),
+                            ...(rowIndex === headerStructure.length - 1 && cellIndex === headerRow.length - 1 && {
+                              borderRight: "2px solid #999999", // Thick right border for bottom-right cell
+                              borderBottom: "1px dashed #999999", // Dashed bottom border for bottom-right cell
+                            }),
+                            ...(rowIndex === 0 && cellIndex > 0 && cellIndex < headerRow.length - 1 && {
+                              borderTop: "2px solid #999999", // Thick top border for top middle cells
+                            }),
+                            ...(rowIndex === headerStructure.length - 1 && cellIndex > 0 && cellIndex < headerRow.length - 1 && {
+                              borderBottom: "1px dashed #999999", // Dashed bottom border for bottom middle cells
+                              borderTop: "1px dashed #999999", // Dashed top border for bottom middle cells
+                            }),
+                            ...(cellIndex === 0 && rowIndex > 0 && rowIndex < headerStructure.length - 1 && {
+                              borderLeft: "2px solid #999999", // Thick left border for left middle cells
+                              borderTop: "1px dashed #999999", // Dashed top border for left middle cells
+                              borderBottom: "1px dashed #999999", // Dashed bottom border for left middle cells
+                            }),
+                            ...(cellIndex === headerRow.length - 1 && rowIndex > 0 && rowIndex < headerStructure.length - 1 && {
+                              borderRight: "2px solid #999999", // Thick right border for right middle cells
+                              borderTop: "1px dashed #999999", // Dashed top border for right middle cells
+                              borderBottom: "1px dashed #999999", // Dashed bottom border for right middle cells
+                            }),
+                            ...(cellIndex > 0 && cellIndex < headerRow.length - 1 && rowIndex > 0 && rowIndex < headerStructure.length - 1 && {
+                              borderTop: "1px dashed #999999",
+                              borderRight: "1px dashed #999999",
+                              borderBottom: "1px dashed #999999",
+                              borderLeft: "1px dashed #999999",
+                            }),
+                          }}
+                          colSpan={headerCell.colSpan || 1}
+                        >
+                          <span>{cleanHeaderLabel(typeof headerCell === 'string' ? headerCell : headerCell.label)}</span>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                ))}
+                {/* Filter row for multi-row headers */}
+                {showFilters && headerStructure && headerStructure.length > 0 && (
+                  <tr>
+                    {filteredColumns.map((col, i) => (
+                      <th 
+                        key={`filter-multi-${i}`}
+                        style={{
+                          backgroundColor: T.filterBg,
+                          padding: "4px",
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 11,
+                          ...(i === 0 && {
+                            borderLeft: "2px solid #999999",
+                            borderBottom: "1px dashed #999999",
+                          }),
+                          ...(i === filteredColumns.length - 1 && {
+                            borderRight: "2px solid #999999",
+                            borderBottom: "1px dashed #999999",
+                          }),
+                          ...(i > 0 && i < filteredColumns.length - 1 && {
+                            borderBottom: "1px dashed #999999",
+                            borderLeft: "1px dashed #999999",
+                            borderRight: "1px dashed #999999",
+                          }),
+                        }}
+                      >
+                        <Input
+                          type="text"
+                          placeholder={`Filter ${cleanHeaderLabel(col)}`}
+                          value={filters[col] || ""}
+                          onChange={(e) => handleFilterChange(col, e.target.value)}
+                          className="w-full h-6 text-xs px-1 py-0"
+                          style={{
+                            backgroundColor: themeMode === "dark" ? "#444" : "#FFF",
+                            border: "1px solid #999",
+                          }}
+                        />
+                      </th>
+                    ))}
+                  </tr>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Render single-row headers if no headerStructure is provided */}
+                <tr>
+                  {filteredColumns.map((col, i) => {
+                    // Apply special text colors based on column name
                     let textColor = T.headerText;
-                    const headerLabel = typeof headerCell === 'string' ? headerCell : headerCell.label;
-                    if (headerLabel.includes("Catch Up Plan")) {
+                    if (col.includes("Catch Up Plan")) {
                       textColor = "#0000FF"; // Blue for "Catch Up Plan"
-                    } else if (headerLabel.includes("% Status")) {
+                    } else if (col.includes("% Status")) {
                       textColor = "#008000"; // Green for "% Status"
-                    } else if (headerLabel.includes("Deviation Plan vs Actual")) {
+                    } else if (col.includes("Deviation Plan vs Actual")) {
                       textColor = "#FF0000"; // Red for "Deviation Plan vs Actual"
                     }
                     
                     return (
                       <th 
-                        key={cellIndex}
+                        key={i} 
                         style={{
-                          ...excelHeaderStyle(headerCell, rowIndex),
+                          ...excelHeaderStyle(col),
                           color: textColor,
                           position: "sticky",
                           top: 0,
                           zIndex: 11,
-                          ...(rowIndex === 0 && cellIndex === 0 && {
-                            borderLeft: "2px solid #999999", // Thick left border for top-left cell
-                            borderTop: "2px solid #999999", // Thick top border for top-left cell
+                          ...(i === 0 && {
+                            borderLeft: "2px solid #999999", // Thick left border for first cell
+                            borderTop: "2px solid #999999", // Thick top border for first cell
+                            borderBottom: "1px dashed #999999", // Dashed bottom border for first cell
                           }),
-                          ...(rowIndex === 0 && cellIndex === headerRow.length - 1 && {
-                            borderRight: "2px solid #999999", // Thick right border for top-right cell
-                            borderTop: "2px solid #999999", // Thick top border for top-right cell
+                          ...(i === filteredColumns.length - 1 && {
+                            borderRight: "2px solid #999999", // Thick right border for last cell
+                            borderTop: "2px solid #999999", // Thick top border for last cell
+                            borderBottom: "1px dashed #999999", // Dashed bottom border for last cell
                           }),
-                          ...(rowIndex === headerStructure.length - 1 && cellIndex === 0 && {
-                            borderLeft: "2px solid #999999", // Thick left border for bottom-left cell
-                            borderBottom: "1px dashed #999999", // Dashed bottom border for bottom-left cell
-                          }),
-                          ...(rowIndex === headerStructure.length - 1 && cellIndex === headerRow.length - 1 && {
-                            borderRight: "2px solid #999999", // Thick right border for bottom-right cell
-                            borderBottom: "1px dashed #999999", // Dashed bottom border for bottom-right cell
-                          }),
-                          ...(rowIndex === 0 && cellIndex > 0 && cellIndex < headerRow.length - 1 && {
-                            borderTop: "2px solid #999999", // Thick top border for top middle cells
-                          }),
-                          ...(rowIndex === headerStructure.length - 1 && cellIndex > 0 && cellIndex < headerRow.length - 1 && {
-                            borderBottom: "1px dashed #999999", // Dashed bottom border for bottom middle cells
-                            borderTop: "1px dashed #999999", // Dashed top border for bottom middle cells
-                          }),
-                          ...(cellIndex === 0 && rowIndex > 0 && rowIndex < headerStructure.length - 1 && {
-                            borderLeft: "2px solid #999999", // Thick left border for left middle cells
-                            borderTop: "1px dashed #999999", // Dashed top border for left middle cells
-                            borderBottom: "1px dashed #999999", // Dashed bottom border for left middle cells
-                          }),
-                          ...(cellIndex === headerRow.length - 1 && rowIndex > 0 && rowIndex < headerStructure.length - 1 && {
-                            borderRight: "2px solid #999999", // Thick right border for right middle cells
-                            borderTop: "1px dashed #999999", // Dashed top border for right middle cells
-                            borderBottom: "1px dashed #999999", // Dashed bottom border for right middle cells
-                          }),
-                          ...(cellIndex > 0 && cellIndex < headerRow.length - 1 && rowIndex > 0 && rowIndex < headerStructure.length - 1 && {
-                            borderTop: "1px dashed #999999",
-                            borderRight: "1px dashed #999999",
-                            borderBottom: "1px dashed #999999",
-                            borderLeft: "1px dashed #999999",
+                          ...(i > 0 && i < filteredColumns.length - 1 && {
+                            borderTop: "2px solid #999999", // Thick top border for middle cells
+                            borderBottom: "1px dashed #999999", // Dashed bottom border for middle cells
+                            borderLeft: "1px dashed #999999", // Dashed left border for middle cells
+                            borderRight: "1px dashed #999999", // Dashed right border for middle cells
                           }),
                         }}
-                        colSpan={headerCell.colSpan || 1}
                       >
-                        <span>{cleanHeaderLabel(typeof headerCell === 'string' ? headerCell : headerCell.label)}</span>
+                        <span>{cleanHeaderLabel(col)}</span>
                       </th>
                     );
                   })}
                 </tr>
-              ))
-            ) : (
-              // Render single-row headers if no headerStructure is provided
-              <tr>
-                {filteredColumns.map((col, i) => {
-                  // Apply special text colors based on column name
-                  let textColor = T.headerText;
-                  if (col.includes("Catch Up Plan")) {
-                    textColor = "#0000FF"; // Blue for "Catch Up Plan"
-                  } else if (col.includes("% Status")) {
-                    textColor = "#008000"; // Green for "% Status"
-                  } else if (col.includes("Deviation Plan vs Actual")) {
-                    textColor = "#FF0000"; // Red for "Deviation Plan vs Actual"
-                  }
-                  
-                  return (
-                    <th 
-                      key={i} 
-                      style={{
-                        ...excelHeaderStyle(col),
-                        color: textColor,
-                        position: "sticky",
-                        top: 0,
-                        zIndex: 11,
-                        ...(i === 0 && {
-                          borderLeft: "2px solid #999999", // Thick left border for first cell
-                          borderTop: "2px solid #999999", // Thick top border for first cell
-                          borderBottom: "1px dashed #999999", // Dashed bottom border for first cell
-                        }),
-                        ...(i === filteredColumns.length - 1 && {
-                          borderRight: "2px solid #999999", // Thick right border for last cell
-                          borderTop: "2px solid #999999", // Thick top border for last cell
-                          borderBottom: "1px dashed #999999", // Dashed bottom border for last cell
-                        }),
-                        ...(i > 0 && i < filteredColumns.length - 1 && {
-                          borderTop: "2px solid #999999", // Thick top border for middle cells
-                          borderBottom: "1px dashed #999999", // Dashed bottom border for middle cells
-                          borderLeft: "1px dashed #999999", // Dashed left border for middle cells
-                          borderRight: "1px dashed #999999", // Dashed right border for middle cells
-                        }),
-                      }}
-                    >
-                        <span>{cleanHeaderLabel(col)}</span>
-                    </th>
-                  );
-                })}
-              </tr>
+                {/* Filter row for single-row headers */}
+                {showFilters && (
+                  <tr>
+                    {filteredColumns.map((col, i) => (
+                      <th 
+                        key={`filter-${i}`}
+                        style={{
+                          backgroundColor: T.filterBg,
+                          padding: "4px",
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 11,
+                          ...(i === 0 && {
+                            borderLeft: "2px solid #999999",
+                            borderBottom: "1px dashed #999999",
+                          }),
+                          ...(i === filteredColumns.length - 1 && {
+                            borderRight: "2px solid #999999",
+                            borderBottom: "1px dashed #999999",
+                          }),
+                          ...(i > 0 && i < filteredColumns.length - 1 && {
+                            borderBottom: "1px dashed #999999",
+                            borderLeft: "1px dashed #999999",
+                            borderRight: "1px dashed #999999",
+                          }),
+                        }}
+                      >
+                        <Input
+                          type="text"
+                          placeholder={`Filter ${cleanHeaderLabel(col)}`}
+                          value={filters[col] || ""}
+                          onChange={(e) => handleFilterChange(col, e.target.value)}
+                          className="w-full h-6 text-xs px-1 py-0"
+                          style={{
+                            backgroundColor: themeMode === "dark" ? "#444" : "#FFF",
+                            border: "1px solid #999",
+                          }}
+                        />
+                      </th>
+                    ))}
+                  </tr>
+                )}
+              </>
             )}
           </thead>
 
           <tbody>
-            {data.map((row, r) => (
+            {filteredData.map((row, r) => (
               <tr key={r}>
                 {filteredColumns.map((colName, i) => {
                   const col = columns.indexOf(colName);
@@ -645,7 +799,7 @@ export const StyledExcelTable = ({
           }}
         >
           <div style={{ fontSize: "8px" }}>
-            Ready | {data.length} rows × {columns.length} columns
+            Ready | {filteredData.length} of {data.length} rows × {columns.length} columns
           </div>
           <div style={{ fontSize: "10px" }}>Excel Style Sheet</div>
         </div>
