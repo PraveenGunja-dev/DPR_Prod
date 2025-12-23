@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo, useCallback, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Save } from "lucide-react";
@@ -39,7 +39,7 @@ interface DPQtyTableProps {
   useMockData?: boolean; // Flag to use mock data
 }
 
-export function DPQtyTable({ data, setData, onSave, onSubmit, yesterday, today, isLocked = false, status = 'draft', projectId, useMockData = false }: DPQtyTableProps) {
+export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, today, isLocked = false, status = 'draft', projectId, useMockData = false }: DPQtyTableProps) => {
   const { today: currentDate, yesterday: previousDate } = getTodayAndYesterday();
 
   // Fetch data from Oracle P6 ONLY if data is empty and useMockData is true
@@ -65,10 +65,10 @@ export function DPQtyTable({ data, setData, onSave, onSubmit, yesterday, today, 
     };
 
     fetchData();
-  }, [projectId, useMockData]); // Removed setData and data from deps to prevent loops
+  }, [projectId, useMockData, data.length, setData]); // Added data.length and setData to deps
 
-  // Convert data to the format expected by ExcelTable
-  const columns = [
+  // Convert data to the format expected by ExcelTable - memoized
+  const columns = useMemo(() => [
     "Sl.No (p6)",
     "Description (p6)",
     "Total Quantity (p6 edit)",
@@ -84,10 +84,10 @@ export function DPQtyTable({ data, setData, onSave, onSubmit, yesterday, today, 
     "Cumulative (auto)",
     yesterday,
     today
-  ];
+  ], [yesterday, today]);
 
-  // Define column widths for better alignment
-  const columnWidths = {
+  // Define column widths for better alignment - memoized
+  const columnWidths = useMemo(() => ({
     "Sl.No (p6)": 40,
     "Description (p6)": 120,
     "Total Quantity (p6 edit)": 80,
@@ -103,20 +103,20 @@ export function DPQtyTable({ data, setData, onSave, onSubmit, yesterday, today, 
     "Cumulative (auto)": 70,
     [yesterday]: 70,
     [today]: 70
-  };
+  }), [yesterday, today]);
 
-  // Define which columns are editable by the user
-  const editableColumns = [
+  // Define which columns are editable by the user - memoized
+  const editableColumns = useMemo(() => [
     "Total Quantity (p6 edit)",
     "UOM (p6 edit)",
     "Actual Start (p6 edit)",
     "Actual Finish (p6 edit)",
     "Remarks (user)",
     today // Today value is editable
-  ];
+  ], [today]);
 
-  // Convert array of objects to array of arrays
-  const tableData = data.map(row => [
+  // Convert array of objects to array of arrays - memoized
+  const tableData = useMemo(() => data.map(row => [
     row.slNo,
     row.description,
     row.totalQuantity,
@@ -132,10 +132,10 @@ export function DPQtyTable({ data, setData, onSave, onSubmit, yesterday, today, 
     row.cumulative,
     row.yesterday || "", // Number value for yesterday
     row.today || "" // Number value for today (editable)
-  ]);
+  ]), [data]);
 
-  // Handle data changes from ExcelTable
-  const handleDataChange = (newData: any[][]) => {
+  // Handle data changes from ExcelTable - memoized
+  const handleDataChange = useCallback((newData: any[][]) => {
     // Convert array of arrays back to array of objects
     const updatedData = newData.map(row => ({
       slNo: row[0] || "",
@@ -155,7 +155,7 @@ export function DPQtyTable({ data, setData, onSave, onSubmit, yesterday, today, 
       today: row[14] || "" // Number value for today (editable)
     }));
     setData(updatedData);
-  };
+  }, [setData]);
 
   return (
     <div className="space-y-4 w-full">
@@ -227,4 +227,4 @@ export function DPQtyTable({ data, setData, onSave, onSubmit, yesterday, today, 
       />
     </div>
   );
-}
+});

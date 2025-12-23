@@ -78,17 +78,37 @@ export const StyledExcelTable = ({
     return () => observer.disconnect();
   }, []);
 
+
   // Filter the data based on active filters
   const filteredData = data.filter(row => {
     return filteredColumns.every(col => {
       const filterValue = filters[col];
       if (!filterValue) return true; // No filter for this column
-      
+
       const colIndex = columns.indexOf(col);
       const cellValue = row[colIndex]?.toString().toLowerCase() || "";
       return cellValue.includes(filterValue.toLowerCase());
     });
   });
+
+  // Progressive Rendering State
+  const [renderCount, setRenderCount] = useState(50);
+
+  // Reset render count when data or filters change
+  useEffect(() => {
+    setRenderCount(50);
+  }, [data, filters]);
+
+  // Incrementally render more rows
+  useEffect(() => {
+    if (renderCount < filteredData.length) {
+      // Use requestAnimationFrame for smoother UI updates
+      const animationFrame = requestAnimationFrame(() => {
+        setRenderCount(prev => Math.min(prev + 100, filteredData.length));
+      });
+      return () => cancelAnimationFrame(animationFrame);
+    }
+  }, [renderCount, filteredData.length]);
 
   const handleCellChange = (row, col, value) => {
     const cName = columns[col];
@@ -125,10 +145,10 @@ export const StyledExcelTable = ({
   // and applying abbreviations for common terms
   const cleanHeaderLabel = (label) => {
     if (typeof label !== 'string') return label;
-    
+
     // Remove tags first
     let cleanedLabel = label.replace(/\s*\(p6\)|\s*\(edit\)|\s*\(user\)|\s*\(auto\)/gi, '').trim();
-    
+
     // Apply abbreviations for common terms
     const abbreviations = {
       'Actual Start': 'A.S',
@@ -149,13 +169,13 @@ export const StyledExcelTable = ({
       'New Block Nom': 'New Blk',
       'Baseline Priority': 'B.Priority'
     };
-    
+
     // Apply abbreviations
     Object.keys(abbreviations).forEach(fullTerm => {
       const abbreviation = abbreviations[fullTerm];
       cleanedLabel = cleanedLabel.replace(new RegExp(fullTerm, 'gi'), abbreviation);
     });
-    
+
     return cleanedLabel;
   };
 
@@ -170,19 +190,19 @@ export const StyledExcelTable = ({
     } else if (rowIndex > 1) {
       backgroundColor = "#8C9AAF"; // Steel grey for additional header rows
     }
-    
+
     // Apply custom background colors based on column names for DP Qty table
     const colName = typeof col === 'string' ? col : (col.label || '');
     const lowerColName = colName.toLowerCase();
-    if (lowerColName.includes("total quantity") || lowerColName.includes("uom") || 
-        lowerColName.includes("actual start") || lowerColName.includes("actual finish")) {
+    if (lowerColName.includes("total quantity") || lowerColName.includes("uom") ||
+      lowerColName.includes("actual start") || lowerColName.includes("actual finish")) {
       backgroundColor = "#00B050"; // Green for specified columns
     } else if (lowerColName.includes("remarks") || lowerColName.includes("today")) {
       backgroundColor = "#0070C0"; // Blue for Remarks and Today
     } else if (lowerColName.includes("auto") || lowerColName.includes("cumulative") || lowerColName.includes("balance")) {
       backgroundColor = "#FA6868"; // Red for Auto, Cumulative, and Balance
     }
-    
+
     return {
       backgroundColor,
       color: columnTextColors[col] || T.headerText,
@@ -205,10 +225,10 @@ export const StyledExcelTable = ({
   const excelCellStyle = (row, col, colName, type) => {
     const isActive = activeCell?.row === row && activeCell?.col === col;
     const isEvenRow = row % 2 === 0;
-    
+
     // Get row style if available
     const rowStyle = rowStyles[row] || {};
-    
+
     // Determine text alignment based on data type and row style
     let textAlign: React.CSSProperties['textAlign'] = "left";
     if (rowStyle.isCategoryRow) {
@@ -292,9 +312,9 @@ export const StyledExcelTable = ({
               </Button>
             )}
 
-            <Button 
-              size="sm" 
-              variant="outline" 
+            <Button
+              size="sm"
+              variant="outline"
               onClick={() => setShowFilters(!showFilters)}
               className={showFilters ? "bg-primary/10" : ""}
             >
@@ -303,9 +323,9 @@ export const StyledExcelTable = ({
             </Button>
 
             {showFilters && Object.keys(filters).some(key => filters[key]) && (
-              <Button 
-                size="sm" 
-                variant="outline" 
+              <Button
+                size="sm"
+                variant="outline"
                 onClick={clearFilters}
                 className="bg-destructive/10 text-destructive"
               >
@@ -356,9 +376,9 @@ export const StyledExcelTable = ({
                 Submit
               </Button>
             )}
-            <Button 
-              size="sm" 
-              variant="outline" 
+            <Button
+              size="sm"
+              variant="outline"
               onClick={() => setShowFilters(!showFilters)}
               className={showFilters ? "bg-primary/10" : ""}
             >
@@ -367,9 +387,9 @@ export const StyledExcelTable = ({
             </Button>
 
             {showFilters && Object.keys(filters).some(key => filters[key]) && (
-              <Button 
-                size="sm" 
-                variant="outline" 
+              <Button
+                size="sm"
+                variant="outline"
                 onClick={clearFilters}
                 className="bg-destructive/10 text-destructive"
               >
@@ -393,7 +413,7 @@ export const StyledExcelTable = ({
       >
         <table
           className="w-full border-collapse excel-grid"
-          style={{ 
+          style={{
             tableLayout: "fixed",
             border: "2px solid #999999", // Thick solid grey outer borders
             fontSize: "11px",
@@ -421,9 +441,9 @@ export const StyledExcelTable = ({
                       } else if (headerLabel.includes("Deviation Plan vs Actual")) {
                         textColor = "#FF0000"; // Red for "Deviation Plan vs Actual"
                       }
-                      
+
                       return (
-                        <th 
+                        <th
                           key={cellIndex}
                           style={{
                             ...excelHeaderStyle(headerCell, rowIndex),
@@ -483,7 +503,7 @@ export const StyledExcelTable = ({
                 {showFilters && headerStructure && headerStructure.length > 0 && (
                   <tr>
                     {filteredColumns.map((col, i) => (
-                      <th 
+                      <th
                         key={`filter-multi-${i}`}
                         style={{
                           backgroundColor: T.filterBg,
@@ -536,10 +556,10 @@ export const StyledExcelTable = ({
                     } else if (col.includes("Deviation Plan vs Actual")) {
                       textColor = "#FF0000"; // Red for "Deviation Plan vs Actual"
                     }
-                    
+
                     return (
-                      <th 
-                        key={i} 
+                      <th
+                        key={i}
                         style={{
                           ...excelHeaderStyle(col),
                           color: textColor,
@@ -573,7 +593,7 @@ export const StyledExcelTable = ({
                 {showFilters && (
                   <tr>
                     {filteredColumns.map((col, i) => (
-                      <th 
+                      <th
                         key={`filter-${i}`}
                         style={{
                           backgroundColor: T.filterBg,
@@ -616,16 +636,16 @@ export const StyledExcelTable = ({
           </thead>
 
           <tbody>
-            {filteredData.map((row, r) => (
+            {filteredData.slice(0, renderCount).map((row, r) => (
               <tr key={r}>
                 {filteredColumns.map((colName, i) => {
                   const col = columns.indexOf(colName);
                   const value = row[col];
                   const type = columnTypes[colName] || "text";
-                  
+
                   // Get row style if available
                   const rowStyle = rowStyles[r] || {};
-                  
+
                   // Determine text alignment based on data type and row style
                   let textAlign: React.CSSProperties['textAlign'] = "left";
                   if (rowStyle.isCategoryRow) {
@@ -640,7 +660,7 @@ export const StyledExcelTable = ({
                     <td
                       key={i}
                       style={
-                        type === "date" ? 
+                        type === "date" ?
                           {
                             ...excelCellStyle(r, col, colName, type),
                             position: "relative",
@@ -686,7 +706,7 @@ export const StyledExcelTable = ({
                             ...(r > 0 && r < data.length - 1 && i > 0 && i < filteredColumns.length - 1 && {
                               border: "1px dashed #999999", // Dashed borders for middle cells
                             }),
-                          } : 
+                          } :
                           {
                             ...excelCellStyle(r, col, colName, type),
                             // Apply Excel-style borders for data cells
@@ -753,7 +773,7 @@ export const StyledExcelTable = ({
                         }}
                         className="w-full h-full px-1 border-none focus-visible:ring-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                         style={
-                          type === "date" ? 
+                          type === "date" ?
                             {
                               background: "transparent",
                               fontSize: "8px",
@@ -769,7 +789,7 @@ export const StyledExcelTable = ({
                               position: "relative",
                               zIndex: "1",
                               cursor: "pointer",
-                            } : 
+                            } :
                             {
                               background: "transparent",
                               fontSize: "8px",

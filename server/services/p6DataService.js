@@ -183,8 +183,20 @@ class P6DataService {
 
     /**
      * Get activities from local DB, joined with WBS
+     * @param {number} projectId - P6 Project ObjectId
+     * @param {Object} options - Pagination options
+     * @param {number} options.page - Page number (1-indexed)
+     * @param {number} options.limit - Number of items per page
+     * @returns {Object} Activities with pagination metadata
      */
-    async getActivities(projectId) {
+    async getActivities(projectId, { page = 1, limit = 50 } = {}) {
+        const offset = (page - 1) * limit;
+
+        // Get total count for pagination metadata
+        const countSql = `SELECT COUNT(*) FROM p6_activities WHERE project_object_id = $1`;
+        const countRes = await pool.query(countSql, [projectId]);
+        const totalCount = parseInt(countRes.rows[0].count);
+
         // We join with WBS to get block/plot names (wbs.name or wbs.code)
         const sql = `
             SELECT 
@@ -195,9 +207,25 @@ class P6DataService {
             LEFT JOIN p6_wbs w ON a.wbs_object_id = w.object_id
             WHERE a.project_object_id = $1
             ORDER BY a.activity_id
+            LIMIT $2 OFFSET $3
         `;
-        const res = await pool.query(sql, [projectId]);
-        return res.rows.map(row => this._mapToFrontendFormat(row));
+        const res = await pool.query(sql, [projectId, limit, offset]);
+
+        const activities = res.rows.map((row, index) => ({
+            ...this._mapToFrontendFormat(row),
+            slNo: offset + index + 1  // Add sequential number across pages
+        }));
+
+        return {
+            activities,
+            pagination: {
+                page,
+                limit,
+                totalCount,
+                totalPages: Math.ceil(totalCount / limit),
+                hasMore: offset + res.rows.length < totalCount
+            }
+        };
     }
 
     _mapToFrontendFormat(row) {

@@ -481,10 +481,12 @@ router.get('/manpower-details-data', ensureAuthAndPool, async (req, res) => {
  * GET /api/oracle-p6/activities
  * Fetch activities from Oracle P6 REST API for a specific project
  * @query projectId - The P6 ProjectObjectId to filter activities
+ * @query page - Optional. Page number (1-indexed), default 1
+ * @query limit - Optional. Items per page, default 50
  */
 router.get('/activities', ensureAuth, async (req, res) => {
   try {
-    const { projectId } = req.query;
+    const { projectId, page = 1, limit = 50 } = req.query;
 
     if (!projectId) {
       return res.status(400).json({
@@ -496,27 +498,37 @@ router.get('/activities', ensureAuth, async (req, res) => {
       });
     }
 
-    console.log(`Fetching P6 activities for project ObjectId: ${projectId}`);
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 50;
+
+    console.log(`Fetching P6 activities for project ObjectId: ${projectId}, page ${pageNum}`);
 
     // Use the database caching layer for performance
     try {
-      let activities = await p6DataService.getActivities(parseInt(projectId));
+      let result = await p6DataService.getActivities(parseInt(projectId), {
+        page: pageNum,
+        limit: limitNum
+      });
 
       // If DB is empty, trigger an initial sync
-      if (!activities || activities.length === 0) {
+      if (!result.activities || result.activities.length === 0) {
         console.log(`[P6 Cache] Miss for project ${projectId}, triggering sync...`);
         await p6DataService.syncProject(parseInt(projectId));
-        activities = await p6DataService.getActivities(parseInt(projectId));
+        result = await p6DataService.getActivities(parseInt(projectId), {
+          page: pageNum,
+          limit: limitNum
+        });
       } else {
-        console.log(`[P6 Cache] Hit for project ${projectId}: ${activities.length} activities`);
+        console.log(`[P6 Cache] Hit for project ${projectId}: ${result.activities.length} activities`);
       }
 
       // Return the activities (p6DataService already maps them to frontend format)
       res.status(200).json({
         message: 'Activities fetched from P6 Database Cache',
         projectId: projectId,
-        count: activities.length,
-        activities: activities,
+        count: result.activities.length,
+        activities: result.activities,
+        pagination: result.pagination,
         source: 'p6_db_cache'
       });
 
@@ -1276,10 +1288,13 @@ router.get('/project-issues', ensureAuth, async (req, res) => {
  * GET /api/oracle-p6/activities-full
  * Fetch complete activity data including WBS names and resource names
  * This is the main endpoint for populating all supervisor dashboard tables
+ * @query projectId - Required. The P6 ProjectObjectId
+ * @query page - Optional. Page number (1-indexed), default 1
+ * @query limit - Optional. Items per page, default 50
  */
 router.get('/activities-full', ensureAuth, async (req, res) => {
   try {
-    const { projectId } = req.query;
+    const { projectId, page = 1, limit = 50 } = req.query;
     if (!projectId) {
       return res.status(400).json({
         message: 'Project ID is required',
@@ -1287,26 +1302,36 @@ router.get('/activities-full', ensureAuth, async (req, res) => {
       });
     }
 
-    console.log(`Fetching full activity data (cached) for project ${projectId}`);
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 50;
+
+    console.log(`Fetching full activity data (cached) for project ${projectId}, page ${pageNum}, limit ${limitNum}`);
 
     // Use the database caching layer for performance
     try {
-      let activities = await p6DataService.getActivities(parseInt(projectId));
+      let result = await p6DataService.getActivities(parseInt(projectId), {
+        page: pageNum,
+        limit: limitNum
+      });
 
       // If DB is empty, trigger an initial sync
-      if (!activities || activities.length === 0) {
+      if (!result.activities || result.activities.length === 0) {
         console.log(`[P6 Cache] Miss for project ${projectId}, triggering sync...`);
         await p6DataService.syncProject(parseInt(projectId));
-        activities = await p6DataService.getActivities(parseInt(projectId));
+        result = await p6DataService.getActivities(parseInt(projectId), {
+          page: pageNum,
+          limit: limitNum
+        });
       } else {
-        console.log(`[P6 Cache] Hit for project ${projectId}: ${activities.length} activities`);
+        console.log(`[P6 Cache] Hit for project ${projectId}: ${result.activities.length} activities (page ${pageNum}/${result.pagination.totalPages})`);
       }
 
       res.status(200).json({
         message: 'Full activity data fetched from P6 Database Cache',
         projectId: projectId,
-        count: activities.length,
-        activities: activities,
+        count: result.activities.length,
+        activities: result.activities,
+        pagination: result.pagination,
         source: 'p6_db_cache'
       });
 

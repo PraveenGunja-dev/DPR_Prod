@@ -17,11 +17,12 @@ import { ProtectedRoute } from "@/modules/auth/components/ProtectedRoute"
 import { ThemeProvider } from "@/components/ThemeProvider"
 import SSOLogin from "@/modules/auth/SSOLogin"
 import { ChartsPage } from "@/modules/charts"
+import { InfiniteScrollDemoPage } from "@/pages/InfiniteScrollDemoPage"
+// Debug log to check if SupervisorDashboard is imported
 // Debug log to check if SupervisorDashboard is imported
 console.log("SupervisorDashboard component:", SupervisorDashboard)
 
 const queryClient = new QueryClient()
-
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
@@ -87,6 +88,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <ChartsPage />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/infinite-scroll-demo" 
+                  element={
+                    <ProtectedRoute>
+                      <InfiniteScrollDemoPage />
                     </ProtectedRoute>
                   } 
                 />

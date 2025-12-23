@@ -32,14 +32,6 @@ class OracleP6RestClient {
     }
 
     /**
-     * Set token from user authentication
-     * @param {string} token - User's access token
-     */
-    setAuthToken(token) {
-        this._manualToken = token;
-    }
-
-    /**
      * Make authenticated GET request
      * @param {string} endpoint - API endpoint (e.g., '/project')
      * @param {Object} params - Query parameters

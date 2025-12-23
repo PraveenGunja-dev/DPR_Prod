@@ -1,13 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useInView } from "react-intersection-observer";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "@/modules/auth/contexts/AuthContext";
 import { useNotification } from "@/modules/auth/contexts/NotificationContext";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, FileSpreadsheet, Package, User, Save, Send, Plus, Grid3X3, Building, Wrench } from "lucide-react";
+import { AlertCircle, FileSpreadsheet, Package, User, Save, Send, Plus, Grid3X3, Building, Wrench, RefreshCw } from "lucide-react";
 import { getAssignedProjects, getUserProjects } from "@/modules/auth/services/projectService";
 import { getDraftEntry, saveDraftEntry, submitEntry, getTodayAndYesterday } from "@/modules/auth/services/dprSupervisorService";
-import { getP6ActivitiesForProject, mapActivitiesToDPQty, mapActivitiesToDPBlock, mapActivitiesToDPVendorBlock, mapActivitiesToManpowerDetails, mapActivitiesToDPVendorIdt, P6Activity } from "@/services/p6ActivityService";
+import { getP6ActivitiesForProject, getP6ActivitiesPaginated, mapActivitiesToDPQty, mapActivitiesToDPBlock, mapActivitiesToDPVendorBlock, mapActivitiesToManpowerDetails, mapActivitiesToDPVendorIdt, P6Activity, PaginationInfo, syncP6Data } from "@/services/p6ActivityService";
 import { toast } from "sonner";
 import { Navbar } from "@/components/Navbar";
 import { Card } from "@/components/ui/card";
@@ -67,6 +68,13 @@ const SupervisorDashboard = () => {
   // P6 Activities state
   const [p6Activities, setP6Activities] = useState<P6Activity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
+  const [isP6DataFetched, setIsP6DataFetched] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Pagination state for infinite scroll
+  const [currentPage, setCurrentPage] = useState(1);
+  const [paginationInfo, setPaginationInfo] = useState<PaginationInfo | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Flag to use mock data (for development/testing)
   const useMockData = false; // Set to false to use P6 API data
@@ -306,45 +314,132 @@ const SupervisorDashboard = () => {
   }, [token, currentProjectId, activeTab, useMockData]);
 
   // Fetch P6 activities when project changes (only when not using mock data)
+  // Reset P6 data when project changes
   useEffect(() => {
-    console.log('SupervisorDashboard P6 fetch check - currentProjectId:', currentProjectId, 'useMockData:', useMockData, 'token:', !!token);
+    setIsP6DataFetched(false);
+    setP6Activities([]);
+    setLoadingActivities(false);
+    setCurrentPage(1);
+    setPaginationInfo(null);
+  }, [currentProjectId]);
 
-    const fetchP6Activities = async () => {
-      if (useMockData || !currentProjectId) {
-        console.log('Skipping P6 fetch - useMockData:', useMockData, 'projectId:', currentProjectId);
-        return;
+  // Fetch P6 activities function with pagination (Lazy Load)
+  const fetchP6Activities = useCallback(async (page: number = 1, append: boolean = false) => {
+    if (useMockData || !currentProjectId) {
+      return;
+    }
+
+    try {
+      if (page === 1) {
+        setLoadingActivities(true);
+      } else {
+        setLoadingMore(true);
+      }
+      console.log(`SupervisorDashboard: Fetching P6 activities for project ${currentProjectId} (page ${page})`);
+
+      const response = await getP6ActivitiesPaginated(currentProjectId, page, 50);
+      const activities = response.activities;
+
+      // Update pagination info
+      if (response.pagination) {
+        setPaginationInfo(response.pagination);
+        setCurrentPage(page);
       }
 
-      try {
-        setLoadingActivities(true);
-        console.log(`SupervisorDashboard: Fetching P6 activities for project ${currentProjectId}`);
+      // Update main P6 activities state
+      setP6Activities(prev => {
+        if (append && page > 1) {
+          return [...prev, ...activities];
+        } else {
+          return activities;
+        }
+      });
 
-        const activities = await getP6ActivitiesForProject(currentProjectId);
-        setP6Activities(activities);
+      // KEY OPTIMIZATION: Map ONLY the new activities and append to table states
+      // This avoids O(N) re-mapping of the entire dataset on every load
+      // AND preserves any user edits in existing rows
 
-        // Pre-populate table data with P6 activities
-        if (activities.length > 0) {
+      if (activities.length > 0) {
+        if (append && page > 1) {
+          // APPEND MODE: optimize by only mapping new data
+          setDpQtyData(prev => [...prev, ...mapActivitiesToDPQty(activities) as any]);
+          setDpBlockData(prev => [...prev, ...mapActivitiesToDPBlock(activities) as any]);
+          setDpVendorBlockData(prev => [...prev, ...mapActivitiesToDPVendorBlock(activities) as any]);
+          setDpVendorIdtData(prev => [...prev, ...mapActivitiesToDPVendorIdt(activities) as any]);
+          setManpowerDetailsData(prev => [...prev, ...mapActivitiesToManpowerDetails(activities) as any]);
+        } else {
+          // REPLACE MODE: fresh load (page 1)
           setDpQtyData(mapActivitiesToDPQty(activities) as any);
           setDpBlockData(mapActivitiesToDPBlock(activities) as any);
           setDpVendorBlockData(mapActivitiesToDPVendorBlock(activities) as any);
           setDpVendorIdtData(mapActivitiesToDPVendorIdt(activities) as any);
           setManpowerDetailsData(mapActivitiesToManpowerDetails(activities) as any);
-          toast.success(`Loaded ${activities.length} P6 activities`);
-        } else {
-          console.log('No P6 activities found for project', currentProjectId);
         }
-      } catch (error) {
-        console.error('Error fetching P6 activities:', error);
-        // Don't show error toast - tables will use existing data or empty
-      } finally {
-        setLoadingActivities(false);
-      }
-    };
 
-    if (token && !useMockData) {
-      fetchP6Activities();
+        if (page === 1) {
+          const totalMsg = response.pagination?.totalCount
+            ? ` (${response.pagination.totalCount} total)`
+            : '';
+          toast.success(`Loaded ${activities.length} P6 activities${totalMsg}`);
+        }
+      } else if (page === 1) {
+        console.log('No P6 activities found for project', currentProjectId);
+      }
+
+      setIsP6DataFetched(true);
+    } catch (error) {
+      console.error("Error fetching P6 activities:", error);
+      toast.error("Failed to load P6 activities");
+    } finally {
+      setLoadingActivities(false);
+      setLoadingMore(false);
     }
-  }, [token, currentProjectId, useMockData]);
+  }, [currentProjectId, useMockData]);
+
+  // Load more activities for infinite scroll
+  const loadMoreActivities = useCallback(() => {
+    if (paginationInfo?.hasMore && !loadingMore && !loadingActivities) {
+      fetchP6Activities(currentPage + 1, true);
+    }
+  }, [paginationInfo, loadingMore, loadingActivities, currentPage, fetchP6Activities]);
+
+  // Trigger fetch only when a data tab is active (Lazy Loading)
+  useEffect(() => {
+    const dataTabs = ['dp_qty', 'dp_block', 'dp_vendor_block', 'dp_vendor_idt', 'manpower'];
+
+    // Only fetch if:
+    // 1. We have a token and project
+    // 2. We are not using mock data
+    // 3. User is on a data tab
+    // 4. Data hasn't been fetched yet
+    // 5. Not currently loading
+    if (token && !useMockData && currentProjectId) {
+      if (dataTabs.includes(activeTab) && !isP6DataFetched && !loadingActivities) {
+        fetchP6Activities(1, false);
+      }
+    }
+  }, [activeTab, currentProjectId, token, useMockData, isP6DataFetched, loadingActivities, fetchP6Activities]);
+
+  // Handle Manual Sync
+  const handleSyncP6 = async () => {
+    if (!currentProjectId) return;
+    try {
+      setIsSyncing(true);
+      toast.info("Starting synchronization with Oracle P6... This may take a moment.");
+      await syncP6Data(currentProjectId);
+      toast.success("Synchronization successful! Reloading data...");
+
+      // Force reload from first page
+      setIsP6DataFetched(false);
+      setCurrentPage(1);
+      fetchP6Activities(1, false);
+    } catch (error) {
+      console.error("Sync failed", error);
+      toast.error("Sync failed. Check console for details.");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Handle entry save
   const handleSaveEntry = async () => {
@@ -483,6 +578,57 @@ const SupervisorDashboard = () => {
     toast.success("Issue created successfully!");
   };
 
+  // Load More Trigger component for infinite scroll - auto-triggers when scrolled into view
+  const LoadMoreTrigger = () => {
+    const { ref, inView } = useInView({
+      threshold: 0,
+      rootMargin: '100px', // Trigger 100px before element comes into view
+    });
+
+    // Auto-load when trigger comes into view
+    useEffect(() => {
+      if (inView && paginationInfo?.hasMore && !loadingMore && !loadingActivities) {
+        loadMoreActivities();
+      }
+    }, [inView]);
+
+    if (!paginationInfo) {
+      return null;
+    }
+
+    // Show "All loaded" indicator when all data is loaded
+    if (!paginationInfo.hasMore && paginationInfo.totalCount > 0) {
+      return (
+        <div className="mt-4 p-3 text-center bg-green-50 border border-green-200 rounded-lg">
+          <span className="text-green-700 text-sm">
+            ✓ All {paginationInfo.totalCount} activities loaded
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        ref={ref}
+        className="mt-4 p-3 text-center bg-blue-50 border border-blue-200 rounded-lg"
+      >
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <span className="text-blue-700 text-sm">
+            Showing {p6Activities.length} of {paginationInfo.totalCount} activities
+          </span>
+          {loadingMore ? (
+            <div className="flex items-center text-blue-600">
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              <span className="text-sm">Loading more...</span>
+            </div>
+          ) : (
+            <span className="text-blue-500 text-sm">↓ Scroll to load more</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Render table components based on active tab
   const renderActiveTable = () => {
     // Determine the status based on currentDraftEntry
@@ -521,6 +667,7 @@ const SupervisorDashboard = () => {
               status={entryStatus}
               useMockData={useMockData}
             />
+            <LoadMoreTrigger />
           </>
         );
       case 'dp_vendor_block':
@@ -549,6 +696,7 @@ const SupervisorDashboard = () => {
               status={entryStatus}
               useMockData={useMockData}
             />
+            <LoadMoreTrigger />
           </>
         );
       case 'manpower_details':
@@ -579,6 +727,7 @@ const SupervisorDashboard = () => {
               status={entryStatus}
               useMockData={useMockData}
             />
+            <LoadMoreTrigger />
           </>
         );
       case 'dp_block':
@@ -607,6 +756,7 @@ const SupervisorDashboard = () => {
               status={entryStatus}
               useMockData={useMockData}
             />
+            <LoadMoreTrigger />
           </>
         );
       case 'dp_vendor_idt':
@@ -635,6 +785,7 @@ const SupervisorDashboard = () => {
               status={entryStatus}
               useMockData={useMockData}
             />
+            <LoadMoreTrigger />
           </>
         );
       case 'mms_module_rfi':
@@ -726,6 +877,18 @@ const SupervisorDashboard = () => {
               <p className="text-muted-foreground mt-1">{projectName}</p>
             </div>
             <div className="flex items-center space-x-2">
+              {!useMockData && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSyncP6}
+                  disabled={isSyncing || loadingActivities}
+                  className="flex items-center"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+                  {isSyncing ? 'Syncing...' : 'Sync P6 Data'}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
