@@ -1,0 +1,255 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { StyledExcelTable } from "@/components/StyledExcelTable";
+import { P6Activity } from "@/services/p6ActivityService";
+
+interface DPRSummarySectionProps {
+  p6Activities?: P6Activity[];
+  dpQtyData?: any[];
+  dpBlockData?: any[];
+  dpVendorBlockData?: any[];
+  dpVendorIdtData?: any[];
+  manpowerDetailsData?: any[];
+}
+
+// Category definitions for grouping activities
+const CATEGORIES = [
+  { name: 'PILING', patterns: ['piling', 'stub', 'cap', 'cable hanger', 'robot docking'] },
+  { name: 'MMS', patterns: ['mms', 'tracker', 'torque tube', 'module', 'erection'] },
+  { name: 'IDT', patterns: ['idt', 'foundation'] },
+  { name: 'AC_DC', patterns: ['earthing', 'cable', 'dc ', 'ac ', 'laying'] }
+];
+
+// Aggregate values from table entries by activity name
+const aggregateTableData = (
+  p6Activities: P6Activity[],
+  dpQtyData: any[],
+  dpBlockData: any[],
+  dpVendorBlockData: any[]
+) => {
+  // Create a map of activity data by description/name
+  const activityMap = new Map<string, any>();
+
+  // Initialize with P6 activities
+  p6Activities.forEach(activity => {
+    const name = activity.description || activity.activities || '';
+    if (name) {
+      activityMap.set(name.toLowerCase(), {
+        name,
+        uom: activity.uom || '',
+        totalScope: parseFloat(activity.totalQuantity) || 0,
+        front: parseFloat(activity.front) || 0,
+        completed: parseFloat(activity.actual || activity.completionPercentage) || 0,
+        cumulative: parseFloat(activity.cumulative) || 0,
+        balance: parseFloat(activity.balance) || 0,
+        percentStatus: activity.percentComplete || 0,
+        remarks: activity.remarks || ''
+      });
+    }
+  });
+
+  // Merge/update with DP Qty data
+  dpQtyData.forEach(entry => {
+    const name = entry.description || '';
+    if (name) {
+      const existing = activityMap.get(name.toLowerCase()) || { name };
+      activityMap.set(name.toLowerCase(), {
+        ...existing,
+        totalScope: parseFloat(entry.totalQuantity) || existing.totalScope || 0,
+        balance: parseFloat(entry.balance) || existing.balance || 0,
+        cumulative: parseFloat(entry.cumulative) || existing.cumulative || 0,
+        uom: entry.uom || existing.uom || ''
+      });
+    }
+  });
+
+  // Merge with DP Block data
+  dpBlockData.forEach(entry => {
+    const name = entry.activities || '';
+    if (name) {
+      const existing = activityMap.get(name.toLowerCase()) || { name };
+      activityMap.set(name.toLowerCase(), {
+        ...existing,
+        completed: parseFloat(entry.completed) || existing.completed || 0,
+        front: parseFloat(entry.front) || existing.front || 0,
+        balance: parseFloat(entry.balance) || existing.balance || 0
+      });
+    }
+  });
+
+  // Merge with DP Vendor Block data
+  dpVendorBlockData.forEach(entry => {
+    if (entry.isCategoryRow) return;
+    const name = entry.activities || '';
+    if (name) {
+      const existing = activityMap.get(name.toLowerCase()) || { name };
+      activityMap.set(name.toLowerCase(), {
+        ...existing,
+        completed: parseFloat(entry.actual) || existing.completed || 0,
+        front: parseFloat(entry.front) || existing.front || 0,
+        remarks: entry.remarks || existing.remarks || ''
+      });
+    }
+  });
+
+  return activityMap;
+};
+
+// Group activities by category
+const groupActivitiesByCategory = (activityMap: Map<string, any>) => {
+  const grouped: { category: string; activities: any[] }[] = [];
+  const usedNames = new Set<string>();
+
+  CATEGORIES.forEach(category => {
+    const matchingActivities: any[] = [];
+
+    activityMap.forEach((data, key) => {
+      if (usedNames.has(key)) return;
+      if (category.patterns.some(pattern => key.includes(pattern))) {
+        matchingActivities.push(data);
+        usedNames.add(key);
+      }
+    });
+
+    if (matchingActivities.length > 0) {
+      grouped.push({ category: category.name, activities: matchingActivities });
+    }
+  });
+
+  // Add remaining to OTHER
+  const remaining: any[] = [];
+  activityMap.forEach((data, key) => {
+    if (!usedNames.has(key)) remaining.push(data);
+  });
+  if (remaining.length > 0) {
+    grouped.push({ category: 'OTHER', activities: remaining });
+  }
+
+  return grouped;
+};
+
+// Build table rows from grouped data
+const buildTableData = (groupedActivities: { category: string; activities: any[] }[]) => {
+  const rows: string[][] = [];
+  const categoryRowIndices: number[] = [];
+
+  groupedActivities.forEach(group => {
+    categoryRowIndices.push(rows.length);
+    rows.push([group.category, '', '', '', '', '', '', '', '']);
+
+    group.activities.forEach(activity => {
+      const completed = activity.completed || 0;
+      const totalScope = activity.totalScope || 0;
+      const percentStatus = totalScope > 0 ? Math.round((completed / totalScope) * 100) : 0;
+      const status = percentStatus >= 100 ? 'Completed' : (percentStatus > 0 ? 'WIP' : '');
+
+      rows.push([
+        activity.name || '',
+        activity.uom || '',
+        String(totalScope || ''),
+        String(activity.front || ''),
+        String(completed || ''),
+        String(activity.cumulative || ''),
+        String(activity.balance || ''),
+        `${percentStatus}%`,
+        status || activity.remarks || ''
+      ]);
+    });
+  });
+
+  return { rows, categoryRowIndices };
+};
+
+export const DPRSummarySection: React.FC<DPRSummarySectionProps> = ({
+  p6Activities = [],
+  dpQtyData = [],
+  dpBlockData = [],
+  dpVendorBlockData = [],
+  dpVendorIdtData = [],
+  manpowerDetailsData = []
+}) => {
+  const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
+  const [activeTable, setActiveTable] = useState<'main' | 'charging'>('main');
+
+  useEffect(() => {
+    const updateTheme = () => {
+      const isDark = document.documentElement.classList.contains('dark');
+      setThemeMode(isDark ? 'dark' : 'light');
+    };
+    updateTheme();
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
+  // Aggregate and group data dynamically
+  const { mainActivityData, rowStyles } = useMemo(() => {
+    if (p6Activities.length === 0 && dpQtyData.length === 0 && dpBlockData.length === 0) {
+      return {
+        mainActivityData: [['No activities loaded', '', '', '', '', '', '', '', '']],
+        rowStyles: {}
+      };
+    }
+
+    const activityMap = aggregateTableData(p6Activities, dpQtyData, dpBlockData, dpVendorBlockData);
+    const grouped = groupActivitiesByCategory(activityMap);
+    const { rows, categoryRowIndices } = buildTableData(grouped);
+
+    const styles: Record<number, any> = {};
+    categoryRowIndices.forEach(index => {
+      styles[index] = { isCategoryRow: true };
+    });
+
+    return { mainActivityData: rows, rowStyles: styles };
+  }, [p6Activities, dpQtyData, dpBlockData, dpVendorBlockData]);
+
+  const getContainerBgClass = () => themeMode === 'light' ? 'bg-white' : 'bg-gray-900';
+  const getTitleBarBgClass = () => themeMode === 'light' ? 'bg-[#DDE4EC]' : 'bg-[#2D2D2D]';
+  const getTitleBarTextClass = () => themeMode === 'light' ? 'text-black' : 'text-white';
+
+  return (
+    <div className={`w-full p-4 rounded-lg shadow-md ${getContainerBgClass()}`}>
+      <div className={`w-full ${getTitleBarBgClass()} text-center font-bold text-sm py-2 mb-4 ${getTitleBarTextClass()}`}>
+        DAILY PROGRESS REPORT – KHAVDA HYBRID SOLAR PHASE 3 (YEAR 2025–26)
+      </div>
+
+      <div className="mb-4 flex justify-end">
+        <select
+          value={activeTable}
+          onChange={(e) => setActiveTable(e.target.value as 'main' | 'charging')}
+          className={`p-2 border rounded ${themeMode === 'light' ? 'bg-white border-gray-300' : 'bg-gray-800 border-gray-600 text-white'}`}
+        >
+          <option value="main">Main Activity</option>
+          <option value="charging">Charging Plan</option>
+        </select>
+      </div>
+
+      {activeTable === 'main' && (
+        <StyledExcelTable
+          title="Main Activity"
+          columns={["Activity", "UOM", "Total Scope", "Front", "Completed", "Cumulative", "Balance", "% Status", "Remarks"]}
+          data={mainActivityData}
+          onDataChange={() => { }}
+          onSave={() => { }}
+          onSubmit={() => { }}
+          columnTypes={{
+            "Activity": "text", "UOM": "text", "Total Scope": "number", "Front": "number",
+            "Completed": "number", "Cumulative": "number", "Balance": "number", "% Status": "text", "Remarks": "text"
+          }}
+          columnWidths={{
+            "Activity": 150, "UOM": 60, "Total Scope": 80, "Front": 70,
+            "Completed": 80, "Cumulative": 80, "Balance": 70, "% Status": 70, "Remarks": 100
+          }}
+          rowStyles={rowStyles}
+          isReadOnly={true}
+          hideAddRow={true}
+        />
+      )}
+
+      {activeTable === 'charging' && (
+        <div className="text-center py-8 text-muted-foreground">
+          <p>Charging Plan - Coming soon</p>
+        </div>
+      )}
+    </div>
+  );
+};
