@@ -1,5 +1,5 @@
 import { motion } from "framer-motion"
-import { Building2, User, LogOut, Users, FolderPlus, BarChart3, UserPlus, AlertCircle, Bell } from "lucide-react"
+import { Building2, User, LogOut, Users, FolderPlus, BarChart3, UserPlus, AlertCircle, Bell, Eye } from "lucide-react"
 import { Button } from "./ui/button"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/modules/auth/contexts/AuthContext"
@@ -17,6 +17,7 @@ import { useEffect, useState } from "react"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { createPortal } from "react-dom"
 import { ChevronDown, ChevronRight, Circle } from "lucide-react"
+import { IssuesViewModal } from "@/components/IssuesViewModal"
 
 interface NavbarProps {
   userName?: string
@@ -39,6 +40,7 @@ export const Navbar = ({ userName, userRole, projectName, onAddUser, onAddProjec
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isIssuesModalOpen, setIsIssuesModalOpen] = useState(false)
   // Track expanded state for each notification
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({})
 
@@ -414,6 +416,10 @@ export const Navbar = ({ userName, userRole, projectName, onAddUser, onAddProjec
                           <UserPlus className="mr-2 h-4 w-4" />
                           <span>Assign Project</span>
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setIsIssuesModalOpen(true)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          <span>View Issues</span>
+                        </DropdownMenuItem>
                       </>
                     )}
                     {displayRole === "PMAG" && (
@@ -434,6 +440,10 @@ export const Navbar = ({ userName, userRole, projectName, onAddUser, onAddProjec
                         <DropdownMenuItem onClick={() => navigate("/pmag", { state: { activeTab: "archived" } })}>
                           <FolderPlus className="mr-2 h-4 w-4" />
                           <span>Archived</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setIsIssuesModalOpen(true)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          <span>View Issues</span>
                         </DropdownMenuItem>
                       </>
                     )}
@@ -478,6 +488,12 @@ export const Navbar = ({ userName, userRole, projectName, onAddUser, onAddProjec
 
       {/* Notification Modal Portal */}
       <NotificationModal />
+
+      {/* Issues View Modal */}
+      <IssuesViewModal
+        isOpen={isIssuesModalOpen}
+        onClose={() => setIsIssuesModalOpen(false)}
+      />
     </>
   )
 }

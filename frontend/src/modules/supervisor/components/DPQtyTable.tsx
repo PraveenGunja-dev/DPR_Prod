@@ -1,4 +1,4 @@
-import { useState, useEffect, memo, useCallback, useMemo } from "react";
+import { useState, useEffect, memo, useCallback, useMemo, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Save } from "lucide-react";
@@ -98,54 +98,93 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
     BASE_CUMULATIVE: 14  // Hidden column to store original cumulative (before today's entry)
   }), []);
 
-  // Initialize HyperFormula with data
+  // Track if sheet has been initialized
+  const sheetInitializedRef = useRef(false);
+  const dataIdRef = useRef(0);
+
+  // Build sheet data with formulas
+  const buildSheetData = useCallback((rowData: DPQtyData[]) => {
+    return rowData.map((row, rowIndex) => {
+      const rowNum = rowIndex + 1;
+
+      // Cumulative Formula: = Base Cumulative (O) + Today (N)
+      const cumulativeFormula = `=O${rowNum}+N${rowNum}`;
+
+      // Balance Formula: = Total Quantity (B) - Cumulative (L)
+      const balanceFormula = `=B${rowNum}-L${rowNum}`;
+
+      // Base Cumulative is the initial cumulative value from data (before today's entry)
+      const initialCumulative = Number(row.cumulative) || 0;
+      const initialToday = Number(row.today) || 0;
+      const baseCumulative = initialCumulative - initialToday;
+
+      return [
+        row.description,                    // 0 - A
+        Number(row.totalQuantity) || 0,     // 1 - B (Total Quantity)
+        row.uom,                            // 2 - C
+        balanceFormula,                     // 3 - D (Balance = B - L)
+        row.basePlanStart,                  // 4 - E
+        row.basePlanFinish,                 // 5 - F
+        row.actualStart,                    // 6 - G
+        row.actualFinish,                   // 7 - H
+        row.forecastStart,                  // 8 - I
+        row.forecastFinish,                 // 9 - J
+        row.remarks,                        // 10 - K
+        cumulativeFormula,                  // 11 - L (Cumulative = O + N)
+        Number(row.yesterday) || 0,         // 12 - M (Yesterday)
+        Number(row.today) || 0,             // 13 - N (Today - editable)
+        baseCumulative                      // 14 - O (Base Cumulative - hidden, stores original)
+      ];
+    });
+  }, []);
+
+  // Initialize HyperFormula with data and read calculated values
   useEffect(() => {
     if (data.length === 0) return;
 
+    // Create or update the sheet
+    let sheetId = hfInstance.getSheetId(sheetNameRef);
+
     if (!hfInstance.doesSheetExist(sheetNameRef)) {
       hfInstance.addSheet(sheetNameRef);
-      const sheetId = hfInstance.getSheetId(sheetNameRef);
-      if (sheetId === undefined) return;
-
-      const sheetData = data.map((row, rowIndex) => {
-        const rowNum = rowIndex + 1;
-
-        // Cumulative Formula: = Base Cumulative (O) + Today (N)
-        // Where O is column 14 (BASE_CUMULATIVE) and N is column 13 (TODAY)
-        const cumulativeFormula = `=O${rowNum} + N${rowNum}`;
-
-        // Balance Formula: = Total Quantity (B) - Cumulative (L)
-        const balanceFormula = `=B${rowNum} - L${rowNum}`;
-
-        // Base Cumulative is the initial cumulative value from data (before today's entry)
-        // If today already has a value, we need to subtract it to get the base
-        const initialCumulative = Number(row.cumulative) || 0;
-        const initialToday = Number(row.today) || 0;
-        // Base = Current Cumulative - Today (to get cumulative up to yesterday)
-        const baseCumulative = initialCumulative - initialToday;
-
-        return [
-          row.description,                    // 0 - A
-          Number(row.totalQuantity) || 0,     // 1 - B (Total Quantity)
-          row.uom,                            // 2 - C
-          balanceFormula,                     // 3 - D (Balance = B - L)
-          row.basePlanStart,                  // 4 - E
-          row.basePlanFinish,                 // 5 - F
-          row.actualStart,                    // 6 - G
-          row.actualFinish,                   // 7 - H
-          row.forecastStart,                  // 8 - I
-          row.forecastFinish,                 // 9 - J
-          row.remarks,                        // 10 - K
-          cumulativeFormula,                  // 11 - L (Cumulative = O + N)
-          Number(row.yesterday) || 0,         // 12 - M (Yesterday)
-          Number(row.today) || 0,             // 13 - N (Today - editable)
-          baseCumulative                      // 14 - O (Base Cumulative - hidden, stores original)
-        ];
-      });
-
-      hfInstance.setSheetContent(sheetId, sheetData);
+      sheetId = hfInstance.getSheetId(sheetNameRef);
     }
-  }, [data.length, hfInstance, sheetNameRef]);
+
+    if (sheetId === undefined) return;
+
+    // Build and set sheet data with formulas
+    const sheetData = buildSheetData(data);
+    hfInstance.setSheetContent(sheetId, sheetData);
+    sheetInitializedRef.current = true;
+
+    // Read calculated values and update data if needed
+    let needsUpdate = false;
+    const updatedData = data.map((row, rowIndex) => {
+      const hfBalance = hfInstance.getCellValue({ sheet: sheetId!, row: rowIndex, col: COL.BALANCE });
+      const hfCumulative = hfInstance.getCellValue({ sheet: sheetId!, row: rowIndex, col: COL.CUMULATIVE });
+
+      const newBalance = typeof hfBalance === 'number' ? String(hfBalance) :
+        (typeof hfBalance === 'string' && !hfBalance.startsWith('#')) ? hfBalance : row.balance;
+      const newCumulative = typeof hfCumulative === 'number' ? String(hfCumulative) :
+        (typeof hfCumulative === 'string' && !hfCumulative.startsWith('#')) ? hfCumulative : row.cumulative;
+
+      if (newBalance !== row.balance || newCumulative !== row.cumulative) {
+        needsUpdate = true;
+      }
+
+      return {
+        ...row,
+        balance: newBalance,
+        cumulative: newCumulative
+      };
+    });
+
+    // Only update if values changed (avoid infinite loop)
+    if (needsUpdate && dataIdRef.current === 0) {
+      dataIdRef.current++;
+      setData(updatedData);
+    }
+  }, [data.length, hfInstance, sheetNameRef, buildSheetData, COL, setData]);
 
   // Convert data to the format expected by ExcelTable - memoized
   const columns = useMemo(() => [
@@ -214,21 +253,37 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
   // Handle data changes from ExcelTable - memoized
   const handleDataChange = useCallback((newData: any[][]) => {
     const sheetId = hfInstance.getSheetId(sheetNameRef);
-    if (sheetId === undefined) return;
+    if (sheetId === undefined) {
+      console.warn('HyperFormula sheet not found, skipping calculation update');
+      return;
+    }
+
+    // Table data has 14 columns (columnIndex 0-13), mapped as:
+    // 0: Description, 1: Total Quantity, 2: UOM, 3: Balance (auto), 
+    // 4: Base Plan Start, 5: Base Plan Finish, 6: Actual Start, 7: Actual Finish,
+    // 8: Forecast Start, 9: Forecast Finish, 10: Remarks, 11: Cumulative (auto),
+    // 12: Yesterday, 13: Today
+
+    const TABLE_COL = {
+      TOTAL_QTY: 1,
+      TODAY: 13,
+      BALANCE: 3,
+      CUMULATIVE: 11
+    };
 
     // Batch updates to HyperFormula for performance
     hfInstance.batch(() => {
       newData.forEach((row, rowIndex) => {
-        const totalQty = Number(row[COL.TOTAL_QTY]) || 0;
-        const todayVal = Number(row[COL.TODAY]) || 0;
+        const totalQty = Number(row[TABLE_COL.TOTAL_QTY]) || 0;
+        const todayVal = Number(row[TABLE_COL.TODAY]) || 0;
 
-        // Update Total Quantity (affects Balance)
+        // Update Total Quantity in HyperFormula (affects Balance)
         hfInstance.setCellContents(
           { sheet: sheetId, row: rowIndex, col: COL.TOTAL_QTY },
           totalQty
         );
 
-        // Update Today (affects Cumulative, which affects Balance)
+        // Update Today in HyperFormula (affects Cumulative, which affects Balance)
         hfInstance.setCellContents(
           { sheet: sheetId, row: rowIndex, col: COL.TODAY },
           todayVal
@@ -239,29 +294,29 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
     // Read back calculated values and update state
     const updatedData = newData.map((row, rowIndex) => {
       // Get calculated Balance from HyperFormula
-      let calculatedBalance = row[COL.BALANCE];
       const hfBalance = hfInstance.getCellValue({ sheet: sheetId, row: rowIndex, col: COL.BALANCE });
-      if (typeof hfBalance === 'number' || (typeof hfBalance === 'string' && !hfBalance.startsWith('#'))) {
+      let calculatedBalance = String(row[TABLE_COL.BALANCE] || "");
+      if (typeof hfBalance === 'number') {
         calculatedBalance = String(hfBalance);
-      } else if (hfBalance && typeof hfBalance === 'object' && 'type' in hfBalance) {
-        calculatedBalance = "#ERROR";
+      } else if (typeof hfBalance === 'string' && !hfBalance.startsWith('#') && !hfBalance.startsWith('=')) {
+        calculatedBalance = hfBalance;
       }
 
       // Get calculated Cumulative from HyperFormula
-      let calculatedCumulative = row[COL.CUMULATIVE];
       const hfCumulative = hfInstance.getCellValue({ sheet: sheetId, row: rowIndex, col: COL.CUMULATIVE });
-      if (typeof hfCumulative === 'number' || (typeof hfCumulative === 'string' && !hfCumulative.startsWith('#'))) {
+      let calculatedCumulative = String(row[TABLE_COL.CUMULATIVE] || "");
+      if (typeof hfCumulative === 'number') {
         calculatedCumulative = String(hfCumulative);
-      } else if (hfCumulative && typeof hfCumulative === 'object' && 'type' in hfCumulative) {
-        calculatedCumulative = "#ERROR";
+      } else if (typeof hfCumulative === 'string' && !hfCumulative.startsWith('#') && !hfCumulative.startsWith('=')) {
+        calculatedCumulative = hfCumulative;
       }
 
       return {
         slNo: "",
         description: row[0] || "",
-        totalQuantity: String(row[COL.TOTAL_QTY] || ""),
+        totalQuantity: String(row[TABLE_COL.TOTAL_QTY] || ""),
         uom: row[2] || "",
-        balance: String(calculatedBalance || ""),
+        balance: calculatedBalance,
         basePlanStart: row[4] || "",
         basePlanFinish: row[5] || "",
         actualStart: row[6] || "",
@@ -269,12 +324,14 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
         forecastStart: row[8] || "",
         forecastFinish: row[9] || "",
         remarks: row[10] || "",
-        cumulative: String(calculatedCumulative || ""),
+        cumulative: calculatedCumulative,
         yesterday: row[12] || "",
-        today: String(row[COL.TODAY] || "")
+        today: String(row[TABLE_COL.TODAY] || "")
       };
     });
 
+    // Update dataIdRef to prevent re-initialization loop
+    dataIdRef.current++;
     setData(updatedData);
   }, [setData, hfInstance, sheetNameRef, COL]);
 

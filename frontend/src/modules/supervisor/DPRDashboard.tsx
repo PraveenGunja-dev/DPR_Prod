@@ -56,6 +56,7 @@ import { ManpowerDetailsTable } from "./components/ManpowerDetailsTable";
 import { DPBlockTable } from "./components/DPBlockTable";
 import { DPVendorIdtTable } from "./components/DPVendorIdtTable";
 import { MmsModuleRfiTable } from "./components/MmsModuleRfiTable";
+import { ResourceTable } from "./components/ResourceTable";
 
 // Helper function to format date as YYYY-MM-DD
 const formatDate = (dateString: string | null | undefined): string => {
@@ -137,6 +138,9 @@ const DPRDashboard = () => {
   const [mmsModuleRfiData, setMmsModuleRfiData] = useState<any[]>([
     { /* Add appropriate fields for MMS & Module RFI */ }
   ]);
+
+  // Resource Table state
+  const [resourceData, setResourceData] = useState<any[]>([]);
 
   // DP Block state (duplicate, will rename)
   // const [dpBlockData, setDpBlockData] = useState<any[]>([
@@ -454,6 +458,22 @@ const DPRDashboard = () => {
     );
   };
 
+  // Render Resource table
+  const renderResourceTable = () => {
+    return (
+      <ResourceTable
+        data={resourceData}
+        setData={setResourceData}
+        onSave={handleSaveEntry}
+        onSubmit={handleSubmitEntry}
+        yesterday={yesterday}
+        today={today}
+        isLocked={currentDraftEntry?.status !== 'draft'}
+        status={currentDraftEntry?.status}
+      />
+    );
+  };
+
   return (
     <motion.div
       className="min-h-screen bg-background"
@@ -592,6 +612,10 @@ const DPRDashboard = () => {
                   <User className="w-3 h-3 mr-1" />
                   <span>Supervisor</span>
                 </TabsTrigger>
+                <TabsTrigger value="resource" className="responsive-tab-trigger flex items-center justify-center py-1 px-2 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow rounded-md transition-all duration-200 whitespace-nowrap border border-transparent data-[state=active]:border-primary">
+                  <Wrench className="w-3 h-3 mr-1" />
+                  <span>Resource</span>
+                </TabsTrigger>
                 <TabsTrigger value="issues" className="responsive-tab-trigger flex items-center justify-center py-1 px-2 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow rounded-md transition-all duration-200 whitespace-nowrap border border-transparent data-[state=active]:border-primary">
                   <AlertCircle className="w-3 h-3 mr-1" />
                   <span>Issues</span>
@@ -658,6 +682,12 @@ const DPRDashboard = () => {
                         <h3 className="mt-2 text-lg font-medium">Supervisor Table</h3>
                         <p className="mt-1">Supervisor entry data will be displayed here.</p>
                       </div>
+                    </Card>
+                  )}
+
+                  {activeTab === "resource" && (
+                    <Card className="p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 rounded-lg">
+                      {renderResourceTable()}
                     </Card>
                   )}
 

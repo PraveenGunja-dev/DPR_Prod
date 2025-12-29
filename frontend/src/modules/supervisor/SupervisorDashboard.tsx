@@ -26,6 +26,7 @@ import {
   IssuesTable,
   DPRSummarySection
 } from "./components";
+import { ResourceTable } from "./components/ResourceTable";
 import { DashboardLayout } from "@/components/shared/DashboardLayout";
 
 // Define the Issue interface
@@ -234,6 +235,9 @@ const SupervisorDashboard = () => {
   const [mmsModuleRfiData, setMmsModuleRfiData] = useState([
     { rfiNo: '', subject: '', module: '', submittedDate: '', responseDate: '', status: '', remarks: '', yesterdayValue: '', todayValue: '' }
   ]);
+
+  // Resource Table state
+  const [resourceData, setResourceData] = useState<any[]>([]);
 
   // Track if entry is read-only (submitted)
   const [isEntryReadOnly, setIsEntryReadOnly] = useState(false);
@@ -629,11 +633,31 @@ const SupervisorDashboard = () => {
     const delayedDays = calculateDelayedDays(formData.startDate, formData.finishedDate || null);
 
     try {
-      // Save to backend
+      // Save to backend - ensure project_id is a number
+      const projectIdNum = currentProjectId ? (typeof currentProjectId === 'number' ? currentProjectId : parseInt(currentProjectId, 10)) : undefined;
+
+      // Store all form details in a structured format
+      const fullDescription = JSON.stringify({
+        description: formData.description || '',
+        startDate: formData.startDate || '',
+        finishedDate: formData.finishedDate || '',
+        delayedDays: delayedDays,
+        status: formData.status || 'Open',
+        actionRequired: formData.actionRequired || '',
+        remarks: formData.remarks || ''
+      });
+
+      // Map status to backend format
+      const statusMap: Record<string, string> = {
+        'Open': 'open',
+        'In Progress': 'in_progress',
+        'Resolved': 'resolved'
+      };
+
       await createIssue({
-        project_id: currentProjectId || undefined,
+        project_id: projectIdNum && !isNaN(projectIdNum) ? projectIdNum : undefined,
         title: formData.actionRequired || formData.description?.substring(0, 100) || 'Issue',
-        description: formData.description,
+        description: fullDescription,
         issue_type: 'general',
         priority: formData.status === 'Open' ? 'high' : formData.status === 'In Progress' ? 'medium' : 'low',
       });
@@ -948,6 +972,19 @@ const SupervisorDashboard = () => {
             <p>Supervisor-specific data and controls will be shown here.</p>
           </div>
         );
+      case 'resource':
+        return (
+          <ResourceTable
+            data={resourceData}
+            setData={setResourceData}
+            onSave={isEntryReadOnly ? undefined : handleSaveEntry}
+            onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
+            yesterday={yesterday}
+            today={today}
+            isLocked={isEntryReadOnly}
+            status={entryStatus}
+          />
+        );
       case 'issues':
         return (
           <>
@@ -1043,6 +1080,9 @@ const SupervisorDashboard = () => {
                   <TabsTrigger value="mms_module_rfi" className="whitespace-nowrap px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background">
                     MMS & RFI
                   </TabsTrigger>
+                  <TabsTrigger value="resource" className="whitespace-nowrap px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background">
+                    Resource
+                  </TabsTrigger>
                   <TabsTrigger value="issues" className="whitespace-nowrap px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background">
                     Issue
                   </TabsTrigger>
@@ -1068,6 +1108,9 @@ const SupervisorDashboard = () => {
                 {renderActiveTable()}
               </TabsContent>
               <TabsContent value="mms_module_rfi" className="mt-0 border-0 p-0 pt-4">
+                {renderActiveTable()}
+              </TabsContent>
+              <TabsContent value="resource" className="mt-0 border-0 p-0 pt-4">
                 {renderActiveTable()}
               </TabsContent>
               <TabsContent value="issues" className="mt-0 border-0 p-0 pt-4">
