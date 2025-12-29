@@ -246,7 +246,59 @@ const DPRDashboard = () => {
 
   // Handle entry save
   const handleSaveEntry = async () => {
-    if (!currentDraftEntry) return;
+    // If no draft entry exists, try to create one first
+    if (!currentDraftEntry) {
+      if (!projectId) {
+        toast.error("No project selected. Please select a project first.");
+        return;
+      }
+
+      try {
+        // Try to get/create a draft entry
+        const draft = await getDraftEntry(parseInt(projectId), activeTab);
+        setCurrentDraftEntry(draft);
+
+        // Now save with the newly created draft
+        let dataToSave: any = {};
+        switch (activeTab) {
+          case 'dp-qty':
+            dataToSave = {
+              staticHeader: {
+                projectInfo: 'PLOT - A-06 135 MW - KHAVDA HYBRID SOLAR PHASE 3 (YEAR 2025-26)',
+                reportingDate: today,
+                progressDate: yesterday
+              },
+              rows: dpQtyData
+            };
+            break;
+          case 'dp-vendor-block':
+            dataToSave = { rows: dpVendorBlockData };
+            break;
+          case 'manpower-details':
+            dataToSave = { totalManpower, rows: manpowerDetailsData };
+            break;
+          case 'dp-block':
+            dataToSave = { rows: dpBlockData };
+            break;
+          case 'dp-vendor-idt':
+            dataToSave = { rows: dpVendorIdtData };
+            break;
+          case 'mms-module-rfi':
+            dataToSave = { rows: mmsModuleRfiData };
+            break;
+          default:
+            dataToSave = { rows: [] };
+        }
+
+        await saveDraftEntry(draft.id, dataToSave);
+        toast.success("Entry saved successfully!");
+        return;
+      } catch (error) {
+        console.error('Error creating draft entry for save:', error);
+        toast.error("Failed to save. Could not create draft entry.");
+        return;
+      }
+    }
 
     try {
       let dataToSave: any = {};
@@ -284,6 +336,7 @@ const DPRDashboard = () => {
       await saveDraftEntry(currentDraftEntry.id, dataToSave);
       toast.success("Entry saved successfully!");
     } catch (error) {
+      console.error('Error saving entry:', error);
       toast.error("Failed to save entry");
     }
   };

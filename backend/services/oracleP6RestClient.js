@@ -6,7 +6,8 @@ const { getValidToken } = require('./oracleP6AuthService');
 
 class OracleP6RestClient {
     constructor() {
-        this.baseUrl = process.env.ORACLE_P6_BASE_URL || 'https://sin1.p6.oraclecloud.com/adani/p6ws/restapi';
+        // Use Stage environment (not production)
+        this.baseUrl = process.env.ORACLE_P6_BASE_URL || 'https://sin1.p6.oraclecloud.com/adani/stage/p6ws/restapi';
         this._manualToken = null;
     }
 
@@ -31,8 +32,8 @@ class OracleP6RestClient {
             return token;
         }
 
-        // Fallback hardcoded token (updated Dec 26, 2025 - 3:16 PM)
-        const FALLBACK_TOKEN = 'eyJ4NXQjUzI1NiI6IlV6LU1BTlgyS0VncEFpb2I3cEVwQlZWSmtZSzFvV2FRczBacHhMbDI5NWciLCJ4NXQiOiJGNmE4X1lJMENCTEI3LVpkd3RWNjM5bXFqZ0kiLCJraWQiOiJTSUdOSU5HX0tFWSIsImFsZyI6IlJTMjU2In0.eyJjbGllbnRfb2NpZCI6Im9jaWQxLmRvbWFpbmFwcC5vYzEuYXAtbXVtYmFpLTEuYW1hYWFhYWFhcXRwNWJhYTVnaHlqbG92NnJ5d25zYzdta2w2d2ZybTd3cXJiNm9heXh1M3UzZWVsNWFxIiwidXNlcl90eiI6IkFzaWEvS29sa2F0YSIsInN1YiI6ImFnZWwuZm9yZWNhc3RpbmdAYWRhbmkuY29tIiwidXNlcl9sb2NhbGUiOiJlbiIsInNpZGxlIjo0ODAsInVzZXIudGVuYW50Lm5hbWUiOiJpZGNzLWQyYWE5Y2U2MDFjZDQ4NGFhZTQzNGY4YTJmMDBhMTQ3IiwiaXNzIjoiaHR0cHM6Ly9pZGVudGl0eS5vcmFjbGVjbG91ZC5jb20vIiwiZG9tYWluX2hvbWUiOiJhcC1tdW1iYWktMSIsImNhX29jaWQiOiJvY2lkMS50ZW5hbmN5Lm9jMS4uYWFhYWFhYWFrejRrZnl3cGVjc3h3dHBqc2tiZ2d5ZGNuNzdidGp2cmpocWVhaGJ5dGZ3dWczeXBnamJxIiwidXNlcl90ZW5hbnRuYW1lIjoiaWRjcy1kMmFhOWNlNjAxY2Q0ODRhYWU0MzRmOGEyZjAwYTE0NyIsImNsaWVudF9pZCI6IlByaW1hdmVyYVdUU1NfQWRhbmlfU3RhZ2VfQVBQSUQiLCJkb21haW5faWQiOiJvY2lkMS5kb21haW4ub2MxLi5hYWFhYWFhYTRsejVldWQ1bWc2dm82eGdqbG5lNWptbHMzb2x6NjZmZnQ3anRjd2dnYnRsM3RzNnloc3EiLCJzdWJfdHlwZSI6InVzZXIiLCJzY29wZSI6InVybjpvcGM6aWRtOnQuc2VjdXJpdHkuY2xpZW50IHVybjpvcGM6aWRtOnQudXNlci5hdXRobi5mYWN0b3JzIiwidXNlcl9vY2lkIjoib2NpZDEudXNlci5vYzEuLmFhYWFhYWFhdmQ3MnVkNm5maHg1dW4zMmdndnRhM2RibWlwNTJsYTZ4NnJnZmE0bW1yeGZ4bnJ5dGVncSIsImNsaWVudF90ZW5hbnRuYW1lIjoiaWRjcy1kMmFhOWNlNjAxY2Q0ODRhYWU0MzRmOGEyZjAwYTE0NyIsInJlZ2lvbl9uYW1lIjoiYXAtbXVtYmFpLWlkY3MtMSIsInVzZXJfbGFuZyI6ImVuIiwidXNlckFwcFJvbGVzIjpbIkF1dGhlbnRpY2F0ZWQiXSwiZXhwIjoxNzY2NzY4MTc3LCJpYXQiOjE3NjY3MzIxNzcsImNsaWVudF9ndWlkIjoiODMxYjBjZTYzYTE5NDk0NmI3MjFiOTYxYjdiZTEyNmYiLCJjbGllbnRfbmFtZSI6IlByaW1hdmVyYVdUU1NfQWRhbmlfU3RhZ2UiLCJ0ZW5hbnQiOiJpZGNzLWQyYWE5Y2U2MDFjZDQ4NGFhZTQzNGY4YTJmMDBhMTQ3IiwianRpIjoiNjVmMTY5NmQ2MzdiNGVlODlmMmU1YTNiMTQ4NTE5ZjUiLCJndHAiOiJybyIsInVzZXJfZGlzcGxheW5hbWUiOiJBZ2VsIGZvcmNhc3RpbmciLCJvcGMiOnRydWUsInN1Yl9tYXBwaW5nYXR0ciI6InVzZXJOYW1lIiwicHJpbVRlbmFudCI6dHJ1ZSwidG9rX3R5cGUiOiJBVCIsImF1ZCI6WyJ1cm46b3BjOmxiYWFzOmxvZ2ljYWxndWlkPWlkY3MtZDJhYTljZTYwMWNkNDg0YWFlNDM0ZjhhMmYwMGExNDciLCJodHRwczovL2lkY3MtZDJhYTljZTYwMWNkNDg0YWFlNDM0ZjhhMmYwMGExNDcuYXAtbXVtYmFpLWlkY3MtMS5zZWN1cmUuaWRlbnRpdHkub3JhY2xlY2xvdWQuY29tIiwiaHR0cHM6Ly9pZGNzLWQyYWE5Y2U2MDFjZDQ4NGFhZTQzNGY4YTJmMDBhMTQ3LmlkZW50aXR5Lm9yYWNsZWNsb3VkLmNvbSJdLCJjYV9uYW1lIjoiYWRhbmkiLCJzdHUiOiJQUklNQVZFUkEiLCJ1c2VyX2lkIjoiYjA2ZGZkMWUwZTIxNDYwNWE1MDA5YzE5ZmI5NThkMmEiLCJkb21haW4iOiJEZWZhdWx0IiwiY2xpZW50QXBwUm9sZXMiOlsiVXNlciBWaWV3ZXIiLCJBdXRoZW50aWNhdGVkIENsaWVudCIsIkNsb3VkIEdhdGUiXSwidGVuYW50X2lzcyI6Imh0dHBzOi8vaWRjcy1kMmFhOWNlNjAxY2Q0ODRhYWU0MzRmOGEyZjAwYTE0Ny5pZGVudGl0eS5vcmFjbGVjbG91ZC5jb206NDQzIn0.DlocpzsATEIfR99S5aZKEkSwPQCjFfwolUAR5SDKurr48UC4g-KnOjfnF-8thQqJU6qbEPRNre2GepS5NtKRWoAuG7-xoQht2tjmQvTxT3coQHfIOvL8QZI4LNavikRgp2q8TfiFQ-dlcqcXSdQipkza4_fFSIfyNZbJ8z8TSN6auvJb0wGsWZsejX7wYC6yYjuBB2GIDi6AgED6OuY60sp5JOhtW3if-wcY3j6pWzQdMXzR6MAnwtvP5OBqYv6-rjTqEXAlV4mbpnzAc52nlgzQcxHAhCETaJR1D2UI_8K_VUUxnQ1cv_ujZKsuhw3NGBfM3Lt1nrjbdFSQvd-x5g';
+        // Fallback hardcoded token (updated Dec 28, 2025 - Production)
+        const FALLBACK_TOKEN = 'eyJ4NXQjUzI1NiI6IlV6LU1BTlgyS0VncEFpb2I3cEVwQlZWSmtZSzFvV2FRczBacHhMbDI5NWciLCJ4NXQiOiJGNmE4X1lJMENCTEI3LVpkd3RWNjM5bXFqZ0kiLCJraWQiOiJTSUdOSU5HX0tFWSIsImFsZyI6IlJTMjU2In0.eyJjbGllbnRfb2NpZCI6Im9jaWQxLmRvbWFpbmFwcC5vYzEuYXAtbXVtYmFpLTEuYW1hYWFhYWFhcXRwNWJhYWp3c2JicW9wa3cydXFxcG9jcm52YWl1YXdsdGl6bXkyZmNueDVlbG96Ym1hIiwidXNlcl90eiI6IkFzaWEvS29sa2F0YSIsInN1YiI6ImFnZWwuZm9yZWNhc3RpbmdAYWRhbmkuY29tIiwidXNlcl9sb2NhbGUiOiJlbiIsInNpZGxlIjo0ODAsInVzZXIudGVuYW50Lm5hbWUiOiJpZGNzLWQyYWE5Y2U2MDFjZDQ4NGFhZTQzNGY4YTJmMDBhMTQ3IiwiaXNzIjoiaHR0cHM6Ly9pZGVudGl0eS5vcmFjbGVjbG91ZC5jb20vIiwiZG9tYWluX2hvbWUiOiJhcC1tdW1iYWktMSIsImNhX29jaWQiOiJvY2lkMS50ZW5hbmN5Lm9jMS4uYWFhYWFhYWFrejRrZnl3cGVjc3h3dHBqc2tiZ2d5ZGNuNzdidGp2cmpocWVhaGJ5dGZ3dWczeXBnamJxIiwidXNlcl90ZW5hbnRuYW1lIjoiaWRjcy1kMmFhOWNlNjAxY2Q0ODRhYWU0MzRmOGEyZjAwYTE0NyIsImNsaWVudF9pZCI6IlByaW1hdmVyYVdUU1NfQWRhbmlfUHJvZHVjdGlvbl9BUFBJRCIsImRvbWFpbl9pZCI6Im9jaWQxLmRvbWFpbi5vYzEuLmFhYWFhYWFhNGx6NWV1ZDVtZzZ2bzZ4Z2psbmU1am1sczNvbHo2NmZmdDdqdGN3Z2didGwzdHM2eWhzcSIsInN1Yl90eXBlIjoidXNlciIsInNjb3BlIjoidXJuOm9wYzppZG06dC5zZWN1cml0eS5jbGllbnQgdXJuOm9wYzppZG06dC51c2VyLmF1dGhuLmZhY3RvcnMiLCJ1c2VyX29jaWQiOiJvY2lkMS51c2VyLm9jMS4uYWFhYWFhYWF2ZDcydWQ2bmZoeDV1bjMyZ2d2dGEzZGJtaXA1MmxhNng2cmdmYTRtbXJ4Znhucnl0ZWdxIiwiY2xpZW50X3RlbmFudG5hbWUiOiJpZGNzLWQyYWE5Y2U2MDFjZDQ4NGFhZTQzNGY4YTJmMDBhMTQ3IiwicmVnaW9uX25hbWUiOiJhcC1tdW1iYWktaWRjcy0xIiwidXNlcl9sYW5nIjoiZW4iLCJ1c2VyQXBwUm9sZXMiOlsiQXV0aGVudGljYXRlZCJdLCJleHAiOjE3NjY5NDU3ODgsImlhdCI6MTc2NjkwOTc4OCwiY2xpZW50X2d1aWQiOiI5ZDRkMDQ1NjUxYzA0OTgyOGI3NDFjZWYzNmM3M2UzZiIsImNsaWVudF9uYW1lIjoiUHJpbWF2ZXJhV1RTU19BZGFuaV9Qcm9kdWN0aW9uIiwidGVuYW50IjoiaWRjcy1kMmFhOWNlNjAxY2Q0ODRhYWU0MzRmOGEyZjAwYTE0NyIsImp0aSI6IjY4MmViOTk4NDRhYzQxMDg4ZWFmNTRjOThjY2VjMTIyIiwiZ3RwIjoicm8iLCJ1c2VyX2Rpc3BsYXluYW1lIjoiQWdlbCBmb3JjYXN0aW5nIiwib3BjIjp0cnVlLCJzdWJfbWFwcGluZ2F0dHIiOiJ1c2VyTmFtZSIsInByaW1UZW5hbnQiOnRydWUsInRva190eXBlIjoiQVQiLCJhdWQiOlsidXJuOm9wYzpsYmFhczpsb2dpY2FsZ3VpZD1pZGNzLWQyYWE5Y2U2MDFjZDQ4NGFhZTQzNGY4YTJmMDBhMTQ3IiwiaHR0cHM6Ly9pZGNzLWQyYWE5Y2U2MDFjZDQ4NGFhZTQzNGY4YTJmMDBhMTQ3LmFwLW11bWJhaS1pZGNzLTEuc2VjdXJlLmlkZW50aXR5Lm9yYWNsZWNsb3VkLmNvbSIsImh0dHBzOi8vaWRjcy1kMmFhOWNlNjAxY2Q0ODRhYWU0MzRmOGEyZjAwYTE0Ny5pZGVudGl0eS5vcmFjbGVjbG91ZC5jb20iXSwiY2FfbmFtZSI6ImFkYW5pIiwic3R1IjoiUFJJTUFWRVJBIiwidXNlcl9pZCI6ImIwNmRmZDFlMGUyMTQ2MDVhNTAwOWMxOWZiOTU4ZDJhIiwiZG9tYWluIjoiRGVmYXVsdCIsImNsaWVudEFwcFJvbGVzIjpbIlVzZXIgVmlld2VyIiwiQXV0aGVudGljYXRlZCBDbGllbnQiLCJDbG91ZCBHYXRlIl0sInRlbmFudF9pc3MiOiJodHRwczovL2lkY3MtZDJhYTljZTYwMWNkNDg0YWFlNDM0ZjhhMmYwMGExNDcuaWRlbnRpdHkub3JhY2xlY2xvdWQuY29tOjQ0MyJ9.ImPemDcg3KfVoZTfeux0ScAezh5voIBB_hCKYE1rYf78iHG6VeAohaegQXGEoVTGQ1VYGQ1Nc1dLgyHsTGIDrPH5lZOGMKhv05WhjTgP-Qz-pyyl8spRu_ShnmyLU37KMwlCo9WfN8s7L5IfLa08KmXp4HbCnQmwTKVDU_-8xXk74B6_XREB3LJD_SoyO-65X9aWxiMmMDKhuaLsgXrDKSlPENEf-32jbsGQ7a8EZueAfJsVm5OrJ6_M-Ffs3Y1mk2ejtYU7fwncdDFPT5ou7eACjh22ca4qHS308qBDyrWhti1sZMQxEWCmfbabKJWfJdU1ewgEOAgNpyM51-HA2Q';
 
         console.warn('Using fallback hardcoded token because environment variable is missing');
         return FALLBACK_TOKEN;
@@ -170,8 +171,8 @@ class OracleP6RestClient {
                     Filter: `ForeignObjectId IN (${filterValue})`
                 };
 
-                // Use /udfvalue endpoint (lowercase, correct P6 REST API endpoint)
-                const data = await this.get('/udfvalue', params);
+                // Use /udfValue endpoint (camelCase per P6 Swagger docs)
+                const data = await this.get('/udfValue', params);
                 const udfValues = Array.isArray(data) ? data : (data.data || data.items || []);
                 allUdfValues.push(...udfValues);
             }
@@ -199,7 +200,7 @@ class OracleP6RestClient {
                 Filter: `ProjectObjectId = ${projectObjectId}`
             };
 
-            const data = await this.get('/resourceassignment', params);
+            const data = await this.get('/resourceAssignment', params);
             const assignments = Array.isArray(data) ? data : (data.data || data.items || []);
 
             console.log(`[P6 REST] Retrieved ${assignments.length} resource assignments for project ${projectObjectId}`);
@@ -224,7 +225,7 @@ class OracleP6RestClient {
                 Filter: `ProjectObjectId = ${projectObjectId}`
             };
 
-            const data = await this.get('/activitycodetype', params);
+            const data = await this.get('/activityCodeType', params);
             const codeTypes = Array.isArray(data) ? data : (data.data || data.items || []);
 
             console.log(`[P6 REST] Retrieved ${codeTypes.length} activity code types for project ${projectObjectId}`);
@@ -249,7 +250,7 @@ class OracleP6RestClient {
                 Filter: `ProjectObjectId = ${projectObjectId}`
             };
 
-            const data = await this.get('/activitycode', params);
+            const data = await this.get('/activityCode', params);
             const codes = Array.isArray(data) ? data : (data.data || data.items || []);
 
             console.log(`[P6 REST] Retrieved ${codes.length} activity codes for project ${projectObjectId}`);
@@ -274,7 +275,7 @@ class OracleP6RestClient {
                 Filter: `ProjectObjectId = ${projectObjectId}`
             };
 
-            const data = await this.get('/activitycodeassignment', params);
+            const data = await this.get('/activityCodeAssignment', params);
             const assignments = Array.isArray(data) ? data : (data.data || data.items || []);
 
             console.log(`[P6 REST] Retrieved ${assignments.length} activity code assignments for project ${projectObjectId}`);

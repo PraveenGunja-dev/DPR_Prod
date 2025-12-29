@@ -381,6 +381,13 @@ cellCommentsRouteModule.setPool(pool, authenticateToken);
 app.use('/api/cell-comments', cellCommentsRouteModule.router || cellCommentsRouteModule);
 console.log('Cell comments route registered.');
 
+// Register DPR Activities route (clean P6 data API)
+console.log('Loading dpr activities route...');
+const dprActivitiesRouteModule = require('./routes/dprActivities');
+dprActivitiesRouteModule.setPool(pool, authenticateToken);
+app.use('/api/dpr-activities', dprActivitiesRouteModule.router || dprActivitiesRouteModule);
+console.log('DPR Activities route registered.');
+
 console.log('Routes registered.');
 
 // Refresh token endpoint
