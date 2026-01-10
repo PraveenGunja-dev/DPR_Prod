@@ -276,6 +276,7 @@ export const getResourcesForProject = async (projectObjectId: number | string): 
 
 export const mapActivitiesToDPQty = (activities: P6Activity[]) => {
     return activities.map((a, index) => ({
+        activityId: a.activityId || "", // Crucial for merging saved data
         slNo: String(index + 1),
         description: a.name || "", // Mapped from name
         totalQuantity: a.targetQty !== null ? String(a.targetQty) : "", // Mapped from targetQty

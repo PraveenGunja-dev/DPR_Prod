@@ -904,20 +904,20 @@ router.get('/resources/:projectId', ensureAuthAndPool, async (req, res) => {
     const { projectId } = req.params;
 
     // First try to get resources with assignments for this project
+    // Using correct column names: resourceObjectId, resourceId, resourceType
     let query = `
       SELECT 
-        pr.object_id,
-        pr.resource_id,
-        pr.name,
-        pr.type as resource_type,
-        COALESCE(SUM(pra.planned_units), 0) as total_units,
-        COALESCE(SUM(pra.actual_units), 0) as actual_units
+        pr."resourceObjectId" as object_id,
+        pr."resourceId" as resource_id,
+        pr."name",
+        pr."resourceType" as resource_type,
+        COALESCE(SUM(pra."targetQty"), 0) as total_units,
+        COALESCE(SUM(pra."actualQty"), 0) as actual_units
       FROM p6_resources pr
-      LEFT JOIN p6_resource_assignments pra ON pr.object_id = pra.resource_object_id AND pra.project_object_id = $1
-      GROUP BY pr.object_id, pr.resource_id, pr.name, pr.type
-      HAVING COALESCE(SUM(pra.planned_units), 0) > 0 OR COALESCE(SUM(pra.actual_units), 0) > 0
-      ORDER BY pr.name
-      LIMIT 30
+      LEFT JOIN p6_resource_assignments pra ON pr."resourceObjectId" = pra."resourceObjectId" AND pra."projectObjectId" = $1
+      GROUP BY pr."resourceObjectId", pr."resourceId", pr."name", pr."resourceType"
+      HAVING COALESCE(SUM(pra."targetQty"), 0) > 0 OR COALESCE(SUM(pra."actualQty"), 0) > 0
+      ORDER BY pr."name"
     `;
 
     let result = await req.pool.query(query, [projectId]);
@@ -926,16 +926,15 @@ router.get('/resources/:projectId', ensureAuthAndPool, async (req, res) => {
     if (result.rows.length === 0) {
       query = `
         SELECT 
-          object_id,
-          resource_id,
-          name,
-          type as resource_type,
+          "resourceObjectId" as object_id,
+          "resourceId" as resource_id,
+          "name",
+          "resourceType" as resource_type,
           0 as total_units,
           0 as actual_units
         FROM p6_resources
-        WHERE name IS NOT NULL AND name != ''
-        ORDER BY name
-        LIMIT 30
+        WHERE "name" IS NOT NULL AND "name" != ''
+        ORDER BY "name"
       `;
       result = await req.pool.query(query);
     }
@@ -968,6 +967,7 @@ router.get('/resources/:projectId', ensureAuthAndPool, async (req, res) => {
     });
   }
 });
+
 
 /**
  * GET /api/oracle-p6/all-resources

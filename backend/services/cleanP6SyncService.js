@@ -194,6 +194,41 @@ class CleanP6SyncService {
     }
 
     // ========================================================================
+    // 4.5 SYNC UNIT OF MEASURES (Lookup Table)
+    // ========================================================================
+    async syncUnitOfMeasures() {
+        this.log('4.5/10 Starting unit of measures sync...');
+
+        try {
+            const uomList = await restClient.get('/unitOfMeasure', {
+                Fields: 'ObjectId,Name'
+            });
+
+            this.log(`Fetched ${uomList.length} units of measure from P6`);
+
+            for (const uom of uomList) {
+                await pool.query(`
+                    INSERT INTO p6_unit_of_measures (
+                        "objectId", "name", "lastSyncAt"
+                    ) VALUES ($1, $2, NOW())
+                    ON CONFLICT ("objectId") DO UPDATE SET
+                        "name" = EXCLUDED."name",
+                        "lastSyncAt" = NOW()
+                `, [
+                    uom.ObjectId,
+                    uom.Name
+                ]);
+            }
+
+            this.log(`✓ Synced ${uomList.length} units of measure`);
+            return uomList.length;
+        } catch (e) {
+            this.log(`Warning: Unit of measures sync failed: ${e.message}`);
+            return 0;
+        }
+    }
+
+    // ========================================================================
     // 5. SYNC RESOURCE ASSIGNMENTS
     // P6 API uses: PlannedUnits/BudgetedUnits = Total Qty, ActualUnits, RemainingUnits
     // We map: PlannedUnits → targetQty, ActualUnits → actualQty, RemainingUnits → remainingQty
@@ -441,6 +476,7 @@ class CleanP6SyncService {
             wbs: 0,
             activities: 0,
             resources: 0,
+            unitOfMeasures: 0,
             resourceAssignments: 0,
             activityUDFValues: 0,
             wbsUDFValues: 0,
@@ -453,6 +489,7 @@ class CleanP6SyncService {
             results.wbs = await this.syncWBS();
             results.activities = await this.syncActivities();
             results.resources = await this.syncResources();
+            results.unitOfMeasures = await this.syncUnitOfMeasures();
             results.resourceAssignments = await this.syncResourceAssignments();
             results.activityUDFValues = await this.syncActivityUDFValues();
             results.wbsUDFValues = await this.syncWBSUDFValues();
@@ -482,6 +519,7 @@ class CleanP6SyncService {
         await pool.query('TRUNCATE TABLE p6_activity_udf_values CASCADE');
         await pool.query('TRUNCATE TABLE p6_resource_assignments CASCADE');
         await pool.query('TRUNCATE TABLE p6_resources CASCADE');
+        await pool.query('TRUNCATE TABLE p6_unit_of_measures CASCADE');
         await pool.query('TRUNCATE TABLE p6_activities CASCADE');
         await pool.query('TRUNCATE TABLE p6_wbs CASCADE');
         await pool.query('TRUNCATE TABLE p6_projects CASCADE');

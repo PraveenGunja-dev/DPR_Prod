@@ -109,7 +109,7 @@ router.get('/activities/:projectObjectId', ensureAuthAndPool, async (req, res) =
                 END AS "percentComplete",
                 -- From resources
                 r."name" AS "contractorName",
-                r."unitOfMeasure",
+                COALESCE(uom."name", r."unitOfMeasure") AS "unitOfMeasure",
                 r."resourceType",
                 -- From WBS
                 w."name" AS "wbsName",
@@ -117,6 +117,7 @@ router.get('/activities/:projectObjectId', ensureAuthAndPool, async (req, res) =
             FROM p6_activities a
             LEFT JOIN p6_resource_assignments ra ON a."activityObjectId" = ra."activityObjectId"
             LEFT JOIN p6_resources r ON ra."resourceObjectId" = r."resourceObjectId"
+            LEFT JOIN p6_unit_of_measures uom ON r."unitOfMeasure"::BIGINT = uom."objectId"
             LEFT JOIN p6_wbs w ON a."wbsObjectId" = w."wbsObjectId"
             WHERE a."projectObjectId" = $1
             ORDER BY a."plannedStartDate", a."activityId"
@@ -278,10 +279,11 @@ router.get('/dp-qty/:projectObjectId', ensureAuthAndPool, async (req, res) => {
                     ELSE NULL 
                 END AS "percentComplete",
                 r."name" AS "contractorName",
-                r."unitOfMeasure"
+                COALESCE(uom."name", r."unitOfMeasure") AS "unitOfMeasure"
             FROM p6_activities a
             LEFT JOIN p6_resource_assignments ra ON a."activityObjectId" = ra."activityObjectId"
             LEFT JOIN p6_resources r ON ra."resourceObjectId" = r."resourceObjectId"
+            LEFT JOIN p6_unit_of_measures uom ON r."unitOfMeasure"::BIGINT = uom."objectId"
             WHERE a."projectObjectId" = $1
             ORDER BY a."plannedStartDate", a."activityId"
         `, [projectObjectId]);

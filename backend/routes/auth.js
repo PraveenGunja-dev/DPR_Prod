@@ -99,14 +99,14 @@ const generateTokens = (user) => {
     process.env.JWT_SECRET || 'adani_flow_secret_key',
     { expiresIn: '15m' }
   );
-  
+
   // Long-lived refresh token (7 days)
   const refreshToken = jwt.sign(
     { userId: user.user_id || user.userId, email: user.email, role: user.role, tokenId: uuidv4() },
     process.env.REFRESH_TOKEN_SECRET || 'adani_flow_refresh_secret_key',
     { expiresIn: '7d' }
   );
-  
+
   return { accessToken, refreshToken };
 };
 
@@ -118,36 +118,36 @@ router.post('/register', async (req, res, next) => {
     authenticateToken(req, res, () => {
       // After authentication, check role-based permissions
       const { role } = req.body;
-      
+
       // Validate role hierarchy:
       // - Super Admin can create any user
       // - PMAG can create Site PM and PMAG users
       // - Site PM can create Supervisor users
       // - Others cannot create users
-      
+
       if (req.user.role === 'Super Admin') {
         // Super Admin can create any user
         next(); // Allow registration
       } else if (req.user.role === 'PMAG') {
         // PMAG can create Site PM and PMAG users
         if (role !== 'Site PM' && role !== 'PMAG') {
-          return res.status(403).json({ 
-            message: 'PMAG users can only create Site PM and PMAG users.' 
+          return res.status(403).json({
+            message: 'PMAG users can only create Site PM and PMAG users.'
           });
         }
         next(); // Allow registration
       } else if (req.user.role === 'Site PM') {
         // Site PM can only create Supervisor users
         if (role !== 'supervisor') {
-          return res.status(403).json({ 
-            message: 'Site PM users can only create Supervisor users.' 
+          return res.status(403).json({
+            message: 'Site PM users can only create Supervisor users.'
           });
         }
         next(); // Allow registration
       } else {
         // Other roles cannot create users
-        return res.status(403).json({ 
-          message: 'Access denied. Only Super Admin, PMAG and Site PM users can create new users.' 
+        return res.status(403).json({
+          message: 'Access denied. Only Super Admin, PMAG and Site PM users can create new users.'
         });
       }
     });
@@ -160,30 +160,30 @@ router.post('/register', async (req, res, next) => {
 
     // Validate required fields
     if (!name || !email || !password || !role) {
-      return res.status(400).json({ 
-        message: 'All fields are required: name, email, password, role' 
+      return res.status(400).json({
+        message: 'All fields are required: name, email, password, role'
       });
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return res.status(400).json({ 
-        message: 'Invalid email format' 
+      return res.status(400).json({
+        message: 'Invalid email format'
       });
     }
 
     // Validate password strength (at least 8 characters)
     if (password.length < 8) {
-      return res.status(400).json({ 
-        message: 'Password must be at least 8 characters long' 
+      return res.status(400).json({
+        message: 'Password must be at least 8 characters long'
       });
     }
 
     // Validate role
     const validRoles = ['supervisor', 'Site PM', 'PMAG', 'Super Admin'];
     if (!validRoles.includes(role)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'Invalid role. Must be one of: ' + validRoles.join(', ')
       });
     }
@@ -202,12 +202,12 @@ router.post('/register', async (req, res, next) => {
 
     // Generate tokens
     const { accessToken, refreshToken } = generateTokens(user);
-    
+
     // Store refresh token
-    refreshTokens.set(refreshToken, { 
-      userId: user.user_id, 
-      email: user.email, 
-      role: user.role 
+    refreshTokens.set(refreshToken, {
+      userId: user.user_id,
+      email: user.email,
+      role: user.role
     });
 
     // Send welcome email with credentials
@@ -254,8 +254,8 @@ router.post('/login', async (req, res) => {
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return res.status(400).json({ 
-        message: 'Invalid email format' 
+      return res.status(400).json({
+        message: 'Invalid email format'
       });
     }
 
@@ -285,13 +285,25 @@ router.post('/login', async (req, res) => {
 
     // Generate tokens
     const { accessToken, refreshToken } = generateTokens(user);
-    
+
     // Store refresh token
-    refreshTokens.set(refreshToken, { 
-      userId: user.user_id, 
-      email: user.email, 
-      role: user.role 
+    refreshTokens.set(refreshToken, {
+      userId: user.user_id,
+      email: user.email,
+      role: user.role
     });
+
+    // Generate P6 OAuth token on login
+    let p6Token = null;
+    try {
+      const { generateP6Token } = require('../services/p6TokenService');
+      const p6TokenData = await generateP6Token();
+      p6Token = p6TokenData.accessToken;
+      console.log('[Login] P6 token generated successfully');
+    } catch (p6Error) {
+      console.error('[Login] Failed to generate P6 token:', p6Error.message);
+      // Don't fail login if P6 token generation fails - it's not critical
+    }
 
     // Remove password from user object
     const { password: _, ...userWithoutPassword } = user;
@@ -301,6 +313,7 @@ router.post('/login', async (req, res) => {
       message: 'Login successful',
       accessToken,
       refreshToken,
+      p6Token, // Include P6 token in response (if generated)
       user: {
         ObjectId: userWithoutPassword.user_id,  // Oracle P6 uses ObjectId
         Name: userWithoutPassword.name,         // Oracle P6 uses PascalCase
@@ -328,7 +341,7 @@ router.post('/refresh-token', async (req, res) => {
   try {
     // Verify refresh token
     const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET || 'adani_flow_refresh_secret_key');
-    
+
     // Check if refresh token exists in our store
     if (!refreshTokens.has(refreshToken)) {
       return res.status(403).json({ message: 'Invalid refresh token' });
@@ -336,10 +349,10 @@ router.post('/refresh-token', async (req, res) => {
 
     // Get user data from refresh token store
     const userData = refreshTokens.get(refreshToken);
-    
+
     // Generate new tokens
     const { accessToken: newAccessToken, refreshToken: newRefreshToken } = generateTokens(userData);
-    
+
     // Remove old refresh token and store new one
     refreshTokens.delete(refreshToken);
     refreshTokens.set(newRefreshToken, userData);
@@ -423,7 +436,7 @@ router.get('/supervisors', (req, res, next) => {
     if (req.user.role !== 'PMAG' && req.user.role !== 'Site PM') {
       return res.status(403).json({ message: 'Access denied. PMAG or Site PM privileges required.' });
     }
-    
+
     // Get all supervisors from database
     const result = await pool.query(
       'SELECT user_id AS "ObjectId", name AS "Name", email AS "Email", role AS "Role" FROM users WHERE role = $1 ORDER BY name',

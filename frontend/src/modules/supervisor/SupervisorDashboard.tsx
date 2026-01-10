@@ -284,7 +284,7 @@ const SupervisorDashboard = () => {
    * - Draft data provides user edits (today, yesterday, remarks, etc.)
    * - Matches by activityId and overlays editable fields
    */
-  const mergeDraftWithP6Data = <T extends { activityId?: string }>(
+  const mergeDraftWithP6Data = <T extends { activityId?: string; description?: string }>(
     p6Rows: T[],
     draftRows: T[],
     editableFields: (keyof T)[]
@@ -293,32 +293,64 @@ const SupervisorDashboard = () => {
       return p6Rows;
     }
 
-    // Create a map of draft rows by activityId for fast lookup
-    const draftMap = new Map<string, T>();
-    draftRows.forEach(row => {
+    console.log(`[Merge] Merging ${draftRows.length} draft rows with ${p6Rows.length} P6 rows`);
+
+    // Create maps for matching by activityId AND description
+    const draftMapById = new Map<string, T>();
+    const draftMapByDescription = new Map<string, T>();
+
+    draftRows.forEach((row, index) => {
       if (row.activityId) {
-        draftMap.set(row.activityId, row);
+        draftMapById.set(row.activityId, row);
+      }
+      if (row.description) {
+        draftMapByDescription.set(row.description, row);
       }
     });
 
-    // Merge: overlay editable fields from draft onto P6 rows
-    return p6Rows.map(p6Row => {
-      if (!p6Row.activityId) return p6Row;
+    console.log(`[Merge] Draft map: ${draftMapById.size} by ID, ${draftMapByDescription.size} by description`);
 
-      const draftRow = draftMap.get(p6Row.activityId);
-      if (!draftRow) return p6Row;
+    // Merge: overlay editable fields from draft onto P6 rows
+    let matchCount = 0;
+    const result = p6Rows.map((p6Row, index) => {
+      // Try to find matching draft row: first by activityId, then by description, then by index
+      let draftRow: T | undefined;
+
+      if (p6Row.activityId) {
+        draftRow = draftMapById.get(p6Row.activityId);
+      }
+
+      if (!draftRow && p6Row.description) {
+        draftRow = draftMapByDescription.get(p6Row.description);
+      }
+
+      // Fallback: match by index if other methods fail
+      // This handles legacy drafts where activityId is missing
+      if (!draftRow && index < draftRows.length) {
+        draftRow = draftRows[index];
+      }
+
+      if (!draftRow) {
+        return p6Row;
+      }
+
+      matchCount++;
 
       // Create merged row: start with P6 data, overlay editable fields from draft
       const merged = { ...p6Row };
       editableFields.forEach(field => {
-        if (draftRow[field] !== undefined && draftRow[field] !== '') {
-          merged[field] = draftRow[field];
+        if (draftRow![field] !== undefined && draftRow![field] !== '') {
+          merged[field] = draftRow![field];
         }
       });
 
       return merged;
     });
+
+    console.log(`[Merge] Successfully merged ${matchCount} out of ${p6Rows.length} rows`);
+    return result;
   };
+
 
   // Track if entry is read-only (submitted)
 
@@ -349,31 +381,39 @@ const SupervisorDashboard = () => {
       // Apply draft data by merging with current state
       // This allows saved edits to persist even when using P6 API data
       if (data.rows && data.rows.length > 0) {
-        console.log('Applying draft merge after P6 data loaded for tab:', activeTab);
+        console.log('Applying draft merge after P6 data loaded for tab:', activeTab, 'Draft rows:', data.rows.length);
+
+        // ALWAYS merge saved edits onto P6 data - P6 data is the source of truth for row count
+        // Only editable fields (today, yesterday, remarks, etc.) are preserved from saved draft
         switch (activeTab) {
           case 'dp_qty':
+            console.log('Merging draft edits onto P6 data for dp_qty. P6 rows:', dpQtyData.length);
             setDpQtyData(prev =>
               mergeDraftWithP6Data(prev, data.rows, ['today', 'yesterday', 'remarks', 'cumulative', 'balance'])
             );
             break;
           case 'dp_vendor_block':
+            console.log('Merging draft edits onto P6 data for dp_vendor_block. P6 rows:', dpVendorBlockData.length);
             setDpVendorBlockData(prev =>
               mergeDraftWithP6Data(prev, data.rows, ['todayValue', 'yesterdayValue', 'remarks', 'actual', 'completionPercentage'])
             );
             if (data.totalManpower) setTotalManpower(data.totalManpower);
             break;
           case 'manpower_details':
+            console.log('Merging draft edits onto P6 data for manpower_details. P6 rows:', manpowerDetailsData.length);
             setManpowerDetailsData(prev =>
               mergeDraftWithP6Data(prev, data.rows, ['todayValue', 'yesterdayValue'])
             );
             if (data.totalManpower) setTotalManpower(data.totalManpower);
             break;
           case 'dp_block':
+            console.log('Merging draft edits onto P6 data for dp_block. P6 rows:', dpBlockData.length);
             setDpBlockData(prev =>
               mergeDraftWithP6Data(prev, data.rows, ['actualStartDate', 'actualFinishDate', 'forecastStartDate', 'forecastFinishDate'])
             );
             break;
           case 'dp_vendor_idt':
+            console.log('Merging draft edits onto P6 data for dp_vendor_idt. P6 rows:', dpVendorIdtData.length);
             setDpVendorIdtData(prev =>
               mergeDraftWithP6Data(prev, data.rows, ['todayValue', 'yesterdayValue', 'remarks', 'actual', 'completionPercentage'])
             );
@@ -388,6 +428,7 @@ const SupervisorDashboard = () => {
       setIsEntryReadOnly(false);
     }
   }, [currentDraftEntry, activeTab, isP6DataFetched, useMockData]);
+
 
   // Fetch data when token, projectId, or activeTab changes
   // Draft entries are ALWAYS needed for the submit workflow, regardless of data source
@@ -461,8 +502,8 @@ const SupervisorDashboard = () => {
       }
       console.log(`SupervisorDashboard: Fetching P6 activities for project ${currentProjectId} (page ${page})`);
 
-      // Fetch up to 500 activities per page (increased from 50 to ensure all entries are loaded for save/submit)
-      const response = await getP6ActivitiesPaginated(currentProjectId, page, 500);
+      // Fetch up to 1000 activities per page (increased to ensure all entries are loaded for save/submit)
+      const response = await getP6ActivitiesPaginated(currentProjectId, page, 1000);
       const activities = response.activities;
 
       // Update pagination info
@@ -588,11 +629,19 @@ const SupervisorDashboard = () => {
       return;
     }
 
+    // Wait for P6 data to load before allowing save
+    if (!isP6DataFetched && !useMockData) {
+      toast.warning("Please wait for data to load before saving");
+      return;
+    }
+
     try {
       let dataToSave: any = {};
+      let rowCount = 0;
 
       switch (activeTab) {
         case 'dp_qty':
+          rowCount = dpQtyData.length;
           dataToSave = {
             staticHeader: {
               projectInfo: 'PLOT - A-06 135 MW - KHAVDA HYBRID SOLAR PHASE 3 (YEAR 2025-26)',
@@ -603,30 +652,46 @@ const SupervisorDashboard = () => {
           };
           break;
         case 'dp_vendor_block':
+          rowCount = dpVendorBlockData.length;
           dataToSave = { rows: dpVendorBlockData };
           break;
         case 'manpower_details':
+          rowCount = manpowerDetailsData.length;
           dataToSave = { totalManpower, rows: manpowerDetailsData };
           break;
         case 'dp_block':
+          rowCount = dpBlockData.length;
           dataToSave = { rows: dpBlockData };
           break;
         case 'dp_vendor_idt':
+          rowCount = dpVendorIdtData.length;
           dataToSave = { rows: dpVendorIdtData };
           break;
         case 'mms_module_rfi':
+          rowCount = mmsModuleRfiData.length;
           dataToSave = { rows: mmsModuleRfiData };
           break;
         default:
           dataToSave = { rows: [] };
       }
 
+      // Log what we're saving for debugging
+      console.log(`handleSaveEntry: Saving ${rowCount} rows for tab ${activeTab}`);
+      console.log('handleSaveEntry: Entry ID:', currentDraftEntry.id);
+
+      // Warn if saving very few rows (might be template/empty data)
+      if (rowCount <= 1) {
+        console.warn('handleSaveEntry: Warning - saving only 1 or fewer rows. P6 data may not have loaded.');
+      }
+
       await saveDraftEntry(currentDraftEntry.id, dataToSave);
-      toast.success("Entry saved successfully!");
+      toast.success(`Saved ${rowCount} rows successfully!`);
     } catch (error) {
+      console.error('handleSaveEntry error:', error);
       toast.error("Failed to save entry");
     }
   };
+
 
   // Handle entry submission
   const handleSubmitEntry = async () => {

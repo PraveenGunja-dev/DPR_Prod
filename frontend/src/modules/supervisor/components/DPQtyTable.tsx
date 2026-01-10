@@ -337,11 +337,6 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
 
   return (
     <div className="space-y-4 w-full">
-      <div className="bg-muted p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-        <h3 className="font-bold text-base mb-1">Project Information</h3>
-        <p className="font-medium text-sm">PLOT - A-06 135 MW - KHAVDA HYBRID SOLAR PHASE 3 (YEAR 2025-26)</p>
-      </div>
-
       <StyledExcelTable
         title="DP Qty Table"
         columns={columns}

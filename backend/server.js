@@ -388,6 +388,16 @@ dprActivitiesRouteModule.setPool(pool, authenticateToken);
 app.use('/api/dpr-activities', dprActivitiesRouteModule.router || dprActivitiesRouteModule);
 console.log('DPR Activities route registered.');
 
+// Register P6 Token route
+console.log('Loading P6 token route...');
+const p6TokenRouteModule = require('./routes/p6Token');
+if (p6TokenRouteModule.setPool) {
+  console.log('Setting pool for P6 token route...');
+  p6TokenRouteModule.setPool(pool, authenticateToken);
+}
+app.use('/api/p6-token', p6TokenRouteModule.router || p6TokenRouteModule);
+console.log('P6 Token route registered.');
+
 console.log('Routes registered.');
 
 // Refresh token endpoint
