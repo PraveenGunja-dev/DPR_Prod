@@ -30,7 +30,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
             try {
                 setLoading(true);
                 // Fetch all activities with a higher limit (500 to get all)
-                const response = await getP6ActivitiesPaginated(String(projectId), 1, 500);
+                const response = await getP6ActivitiesPaginated(String(projectId), 1, 5000);
                 setP6Activities(response.activities);
             } catch (error) {
                 console.error('Failed to fetch P6 activities for summary:', error);

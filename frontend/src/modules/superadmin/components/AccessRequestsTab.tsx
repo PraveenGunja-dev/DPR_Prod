@@ -9,7 +9,8 @@ import {
   CheckCircle2, XCircle, Clock, RefreshCw, Shield,
   User, Mail, Calendar, MessageSquare, Filter 
 } from 'lucide-react';
-import { getAccessRequests, processAccessRequest, AccessRequest } from '@/modules/auth/services/authService';
+import { getAccessRequests, processAccessRequest } from '@/services/userService';
+import { AccessRequest } from '@/types';
 import { toast } from 'sonner';
 
 interface AccessRequestsTabProps {

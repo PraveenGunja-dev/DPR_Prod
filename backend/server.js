@@ -617,41 +617,44 @@ app.use((err, req, res, next) => {
 });
 
 // Serve static files from the React frontend app
-const frontendBuildPath = path.join(__dirname, '..', 'frontend', 'dist');
+const frontendBuildPath = path.resolve(__dirname, '../frontend/dist');
 
-// Middleware to serve static files under /dpr-project
+// Check if frontend/dist exists to prevent 502/404 issues
+const fs = require('fs');
+if (!fs.existsSync(frontendBuildPath)) {
+  console.error(`[CRITICAL] Frontend build directory NOT FOUND at: ${frontendBuildPath}`);
+  console.error('Did you run "npm run build" in the frontend folder?');
+} else {
+  console.log(`[Static] Serving frontend files from: ${frontendBuildPath}`);
+}
+
+// 1. Explicitly serve application icon (renamed to bypass proxy cache 502s)
+app.get('/favicon.ico', (req, res) => {
+  res.sendFile(path.join(frontendBuildPath, 'adani-dpr-icon.ico'));
+});
+app.get('/adani-dpr-icon.ico', (req, res) => {
+  res.sendFile(path.join(frontendBuildPath, 'adani-dpr-icon.ico'));
+});
+
+// 2. Serve static files (images, css, js)
+app.use(express.static(frontendBuildPath));
 app.use('/dpr-project', express.static(frontendBuildPath));
-app.use(express.static(frontendBuildPath)); // Fallback if they access root
 
-// Catch-all for API 404s
+// 2. Catch-all for API 404s
 app.use('/api/*', (req, res) => {
-  res.status(404).json({
-    message: 'API Route not found',
-    path: req.originalUrl
-  });
+  res.status(404).json({ message: 'API Route not found' });
 });
 
-// Any other GET request not handled gets the React app
-app.get('/dpr-project/*', (req, res) => {
-  res.sendFile(path.join(frontendBuildPath, 'index.html'));
-});
-
-// Fallback for root React app
+// 3. Catch-all for React SPA
 app.get('*', (req, res) => {
   res.sendFile(path.join(frontendBuildPath, 'index.html'));
 });
 
-// Schedule the automatic approval job to run daily at midnight
-const { autoApprovePendingSheets } = require('./jobs/automaticApprovalJob');
-const job = schedule.scheduleJob('0 0 * * *', function () {
-  console.log('Scheduled automatic approval job triggered');
-  autoApprovePendingSheets();
-});
-
 // Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log(`NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
-  console.log('Automatic approval job scheduled to run daily at midnight');
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`================================================`);
+  console.log(`🚀 Adani Flow Backend: http://localhost:${PORT}`);
+  console.log(`📁 Static files: ${frontendBuildPath}`);
+  console.log(`================================================`);
 });
 module.exports = { app, pool, authenticateToken };

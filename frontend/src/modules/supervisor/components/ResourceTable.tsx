@@ -20,6 +20,8 @@ interface ResourceTableProps {
     isLocked?: boolean;
     status?: string;
     onExportAll?: () => void;
+    totalRows?: number;
+    universalFilter?: string;
 }
 
 // Note: Resource data should be fetched from P6 API via parent component
@@ -34,7 +36,9 @@ export const ResourceTable = memo(({
     today,
     isLocked = false,
     status = 'draft',
-    onExportAll
+    onExportAll,
+    totalRows,
+    universalFilter
 }: ResourceTableProps) => {
 
     // HyperFormula instance
@@ -238,6 +242,8 @@ export const ResourceTable = memo(({
                 ]}
                 status={status}
                 onExportAll={onExportAll}
+                totalRows={totalRows}
+                externalGlobalFilter={universalFilter}
             />
         </div>
     );

@@ -3,14 +3,23 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Save } from "lucide-react";
 import { StyledExcelTable } from "@/components/StyledExcelTable";
-import { getTodayAndYesterday } from "@/modules/auth/services/dprSupervisorService";
+import { getTodayAndYesterday } from "@/services/dprService";
 import { toast } from "sonner";
 import { StatusChip } from "@/components/StatusChip";
 import { HyperFormula } from "hyperformula";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
 interface DPQtyData {
   yesterdayIsApproved?: boolean;
   activityId?: string;
+  block?: string;
   slNo: string;
   description: string;
   totalQuantity: string;
@@ -24,6 +33,7 @@ interface DPQtyData {
   remarks: string;
   balance: string;
   cumulative: string;
+  weightage: string;
   yesterday?: string; // Number value, not editable
   today?: string; // Number value, editable
 }
@@ -41,10 +51,20 @@ interface DPQtyTableProps {
   onExportAll?: () => void;
   totalRows?: number;
   onFullscreenToggle?: (isFullscreen: boolean) => void;
+  onReachEnd?: () => void;
+  universalFilter?: string;
+  selectedBlock?: string;
 }
 
-export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, today, isLocked = false, status = 'draft', projectId, onExportAll, totalRows, onFullscreenToggle }: DPQtyTableProps) => {
+export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, today, isLocked = false, status = 'draft', projectId, onExportAll, totalRows, onFullscreenToggle, onReachEnd, universalFilter, selectedBlock = "ALL" }: DPQtyTableProps) => {
   const { today: currentDate, yesterday: previousDate } = getTodayAndYesterday();
+
+  // Filter data based on selected block
+  const filteredData = useMemo(() => {
+    if (!Array.isArray(data)) return [];
+    if (selectedBlock === "ALL") return data;
+    return data.filter(d => d.block === selectedBlock);
+  }, [data, selectedBlock]);
 
   // HyperFormula Integration
   // HyperFormula Integration
@@ -59,21 +79,24 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
   // Column Indices (0-based) to match tableData
   // Added BASE_CUMULATIVE at index 14 to store the original cumulative value
   const COL = useMemo(() => ({
-    DESCRIPTION: 0,
-    TOTAL_QTY: 1,
-    UOM: 2,
-    BALANCE: 3,
-    BASE_PLAN_START: 4,
-    BASE_PLAN_FINISH: 5,
-    ACTUAL_START: 6,
-    ACTUAL_FINISH: 7,
-    FORECAST_START: 8,
-    FORECAST_FINISH: 9,
-    REMARKS: 10,
-    CUMULATIVE: 11,
-    YESTERDAY: 12,
-    TODAY: 13,
-    BASE_CUMULATIVE: 14  // Hidden column to store original cumulative (before today's entry)
+    ACTIVITY_ID: 0,
+    BLOCK: 1,
+    DESCRIPTION: 2,
+    WEIGHTAGE: 3,
+    TOTAL_QTY: 4,
+    UOM: 5,
+    BALANCE: 6,
+    BASE_PLAN_START: 7,
+    BASE_PLAN_FINISH: 8,
+    ACTUAL_START: 9,
+    ACTUAL_FINISH: 10,
+    FORECAST_START: 11,
+    FORECAST_FINISH: 12,
+    REMARKS: 13,
+    CUMULATIVE: 14,
+    YESTERDAY: 15,
+    TODAY: 16,
+    BASE_CUMULATIVE: 17  // Hidden column
   }), []);
 
   // Track if sheet has been initialized
@@ -86,11 +109,11 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
     return rows.map((row, rowIndex) => {
       const rowNum = rowIndex + 1;
 
-      // Cumulative Formula: = Base Cumulative (O) + Today (N)
-      const cumulativeFormula = `=O${rowNum}+N${rowNum}`;
-
-      // Balance Formula: = Total Quantity (B) - Cumulative (L)
-      const balanceFormula = `=B${rowNum}-L${rowNum}`;
+      // Cumulative Formula: = Base Cumulative (R) + Yesterday (P) + Today (Q)
+      const cumulativeFormula = `=R${rowNum}+P${rowNum}+Q${rowNum}`;
+      
+      // Balance Formula: = Total Quantity (E) - Cumulative (O)
+      const balanceFormula = `=E${rowNum}-O${rowNum}`;
 
       // Base Cumulative is the cumulative value before Yesterday's and Today's entries
       const initialCumulative = Number(row.cumulative) || 0;
@@ -99,21 +122,24 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
       const baseCumulative = initialCumulative - initialToday - initialYesterday;
 
       return [
-        row.description,                    // 0 - A
-        Number(row.totalQuantity) || 0,     // 1 - B (Total Quantity)
-        row.uom,                            // 2 - C
-        balanceFormula,                     // 3 - D (Balance = B - L)
-        row.basePlanStart,                  // 4 - E
-        row.basePlanFinish,                 // 5 - F
-        row.actualStart,                    // 6 - G
-        row.actualFinish,                   // 7 - H
-        row.forecastStart,                  // 8 - I
-        row.forecastFinish,                 // 9 - J
-        row.remarks,                        // 10 - K
-        `=O${rowNum}+M${rowNum}+N${rowNum}`, // 11 - L (Cumulative = Base + Yesterday + Today)
-        Number(row.yesterday) || 0,         // 12 - M (Yesterday)
-        Number(row.today) || 0,             // 13 - N (Today - editable)
-        baseCumulative                      // 14 - O (Base Cumulative - hidden, stores original)
+        row.activityId || "",               // 0 - A
+        row.block || "",                    // 1 - B
+        row.description,                    // 2 - C
+        Number(row.weightage) || 0,         // 3 - D
+        Number(row.totalQuantity) || 0,     // 4 - E (Total Quantity)
+        row.uom,                            // 5 - F
+        balanceFormula,                     // 6 - G (Balance = E - O)
+        row.basePlanStart,                  // 7 - H
+        row.basePlanFinish,                 // 8 - I
+        row.actualStart,                    // 9 - J
+        row.actualFinish,                   // 10 - K
+        row.forecastStart,                  // 11 - L
+        row.forecastFinish,                 // 12 - M
+        row.remarks,                        // 13 - N
+        cumulativeFormula,                  // 14 - O (Cumulative)
+        Number(row.yesterday) || 0,         // 15 - P (Yesterday)
+        Number(row.today) || 0,             // 16 - Q (Today)
+        baseCumulative                      // 17 - R (Base Cumulative)
       ];
     });
   }, []);
@@ -123,11 +149,11 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
 
   // Initialize HyperFormula with data and read calculated values
   useEffect(() => {
-    if (!Array.isArray(data) || data.length === 0) return;
+    if (!Array.isArray(filteredData) || filteredData.length === 0) return;
 
     // Detect if data has changed from an external source (parent)
     // We stringify the critical parts to detect changes without infinite loops from our own setData
-    const dataSerialized = JSON.stringify(data.map(d => ({
+    const dataSerialized = JSON.stringify(filteredData.map(d => ({
       id: d.activityId,
       c: d.cumulative,
       t: d.today,
@@ -154,14 +180,13 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
     if (sheetId === undefined) return;
 
     // Build and set sheet data with formulas
-    const sheetData = buildSheetData(data);
+    const sheetData = buildSheetData(filteredData);
     hfInstance.setSheetContent(sheetId, sheetData);
     sheetInitializedRef.current = true;
 
     // Read calculated values and update data if needed
     let needsUpdate = false;
-    const safeData = Array.isArray(data) ? data : [];
-    const updatedData = safeData.map((row, rowIndex) => {
+    const updatedData = filteredData.map((row, rowIndex) => {
       const hfBalance = hfInstance.getCellValue({ sheet: sheetId!, row: rowIndex, col: COL.BALANCE });
       const hfCumulative = hfInstance.getCellValue({ sheet: sheetId!, row: rowIndex, col: COL.CUMULATIVE });
 
@@ -175,29 +200,42 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
       }
 
       return {
-        ...row,
-        balance: newBalance,
-        cumulative: newCumulative
+        ...filteredData[rowIndex],
+        balance: typeof hfBalance === 'number' ? String(hfBalance) : String(hfBalance || ""),
+        cumulative: typeof hfCumulative === 'number' ? String(hfCumulative) : String(hfCumulative || "")
       };
     });
 
-    // Only update if values changed (avoid infinite loop)
-    if (needsUpdate) {
-      // Update our ref immediately to prevent this very update from triggering a re-init
-      lastProcessedDataRef.current = JSON.stringify(updatedData.map(d => ({
-        id: d.activityId,
-        c: d.cumulative,
-        t: d.today,
-        y: d.yesterday,
-        qty: d.totalQuantity
-      })));
-      setData(updatedData);
+    const dataSerializedAfter = JSON.stringify(updatedData.map(d => ({
+      id: d.activityId,
+      c: d.cumulative,
+      t: d.today,
+      y: d.yesterday,
+      qty: d.totalQuantity
+    })));
+
+    if (dataSerialized !== dataSerializedAfter) {
+      lastProcessedDataRef.current = dataSerializedAfter;
+      // We need to merge updatedData back into the FULL data set if we are filtering
+      if (selectedBlock !== "ALL") {
+        const fullDataCopy = [...data];
+        updatedData.forEach(updatedRow => {
+            const idx = fullDataCopy.findIndex(d => d.activityId === updatedRow.activityId);
+            if (idx !== -1) fullDataCopy[idx] = updatedRow;
+        });
+        setData(fullDataCopy);
+      } else {
+        setData(updatedData);
+      }
     }
-  }, [data, hfInstance, sheetNameRef, buildSheetData, COL, setData]);
+  }, [filteredData, hfInstance, sheetNameRef, buildSheetData, COL, setData, data, selectedBlock]);
 
   // Convert data to the format expected by ExcelTable - memoized
   const columns = useMemo(() => [
+    "Activity ID",
+    "Block",
     "Description",
+    "Weightage",
     "Scope",
     "UOM",
     "Balance",
@@ -215,7 +253,10 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
 
   // Define column widths for better alignment - memoized
   const columnWidths = useMemo(() => ({
+    "Activity ID": 90,
+    "Block": 100,
     "Description": 150,
+    "Weightage": 80,
     "Scope": 80,
     "UOM": 60,
     "Balance": 70,
@@ -233,6 +274,7 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
 
   // Define which columns are editable by the user - memoized
   const editableColumns = useMemo(() => [
+    "Weightage",
     "Scope",
     "UOM",
     "Actual Start",
@@ -243,27 +285,79 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
   ], [yesterday, today]);
 
   // Convert array of objects to array of arrays - memoized
-  const tableData = useMemo(() => (Array.isArray(data) ? data : []).map(row => [
-    row.description,
-    row.totalQuantity,
-    row.uom,
-    row.balance,
-    row.basePlanStart,
-    row.basePlanFinish,
-    row.actualStart,
-    row.actualFinish,
-    row.forecastStart,
-    row.forecastFinish,
-    row.remarks,
-    row.cumulative,
-    row.yesterday || "", // Number value for yesterday
-    row.today || "" // Number value for today (editable)
-  ]), [data]);
+  const tableData = useMemo(() => {
+    const rows = (Array.isArray(filteredData) ? filteredData : []).map(row => [
+      row.activityId || "",
+      row.block || "",
+      row.description || "",
+      row.weightage || "",
+      row.totalQuantity || "",
+      row.uom || "",
+      row.balance || "",
+      row.basePlanStart || "",
+      row.basePlanFinish || "",
+      row.actualStart || "",
+      row.actualFinish || "",
+      row.forecastStart || "",
+      row.forecastFinish || "",
+      row.remarks || "",
+      row.cumulative || "",
+      row.yesterday || "", 
+      row.today || "" 
+    ]);
+
+    // Add Grand Total Row
+    if (rows.length > 0) {
+      const totalWeightage = rows.reduce((sum, r) => sum + (Number(r[3]) || 0), 0);
+      const totalScope = rows.reduce((sum, r) => sum + (Number(r[4]) || 0), 0);
+      const totalBalance = rows.reduce((sum, r) => sum + (Number(r[6]) || 0), 0);
+      const totalCumulative = rows.reduce((sum, r) => sum + (Number(r[14]) || 0), 0);
+      const totalYesterday = rows.reduce((sum, r) => sum + (Number(r[15]) || 0), 0);
+      const totalToday = rows.reduce((sum, r) => sum + (Number(r[16]) || 0), 0);
+
+      rows.push([
+        "GRAND TOTAL",
+        "", 
+        "",
+        String(totalWeightage.toFixed(2)),
+        String(totalScope.toFixed(2)),
+        "", // UOM
+        String(totalBalance.toFixed(2)),
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        String(totalCumulative.toFixed(2)),
+        String(totalYesterday.toFixed(2)),
+        String(totalToday.toFixed(2))
+      ]);
+    }
+
+    return rows;
+  }, [filteredData]);
+
+  // Row styles for the Grand Total row
+  const rowStyles = useMemo(() => {
+    const styles: Record<number, any> = {};
+    const safeData = Array.isArray(data) ? data : [];
+    if (safeData.length > 0) {
+      styles[safeData.length] = {
+        backgroundColor: "#f1f5f9", // slate-100
+        color: "#0f172a", // slate-900
+        fontWeight: "bold",
+        isTotalRow: true
+      };
+    }
+    return styles;
+  }, [data]);
 
   // Dynamically color cells based on approval status
   const cellTextColors = useMemo(() => {
     const colors: Record<number, Record<string, string>> = {};
-    const safeData = Array.isArray(data) ? data : [];
+    const safeData = Array.isArray(filteredData) ? filteredData : [];
     safeData.forEach((row, rowIndex) => {
       if (row.yesterdayIsApproved === false) {
         // Unverified data (from supervisor drafts)
@@ -280,7 +374,7 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
       }
     });
     return colors;
-  }, [data, yesterday]);
+  }, [filteredData, yesterday]);
 
   // Handle data changes from ExcelTable - memoized
   const handleDataChange = useCallback((newData: any[][]) => {
@@ -290,25 +384,44 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
       return;
     }
 
-    // Table data has 14 columns (columnIndex 0-13), mapped as:
-    // 0: Description, 1: Scope, 2: UOM, 3: Balance (auto), 
-    // 4: Base Plan Start, 5: Base Plan Finish, 6: Actual Start, 7: Actual Finish,
-    // 8: Forecast Start, 9: Forecast Finish, 10: Remarks, 11: Cumulative (auto),
-    // 12: Yesterday, 13: Today
+    // Table data has 15 columns (columnIndex 0-14), mapped as:
+    // 0: Act ID, 1: Descr, 2: Scope, 3: UOM, 4: Balance (auto), 
+    // 5-6: Base Plan, 7-8: Actual, 9-10: Forecast, 11: Remarks, 
+    // 12: Cumulative (auto), 13: Yesterday, 14: Today
 
     const TABLE_COL = {
-      TOTAL_QTY: 1,
-      TODAY: 13,
-      BALANCE: 3,
-      CUMULATIVE: 11,
-      YESTERDAY: 12
+      ACTIVITY_ID: 0,
+      BLOCK: 1,
+      DESCRIPTION: 2,
+      WEIGHTAGE: 3,
+      TOTAL_QTY: 4,
+      UOM: 5,
+      BALANCE: 6,
+      BASE_PLAN_START: 7,
+      BASE_PLAN_FINISH: 8,
+      ACTUAL_START: 9,
+      ACTUAL_FINISH: 10,
+      FORECAST_START: 11,
+      FORECAST_FINISH: 12,
+      REMARKS: 13,
+      CUMULATIVE: 14,
+      YESTERDAY: 15,
+      TODAY: 16
     };
 
     // Batch updates to HyperFormula for performance
     hfInstance.batch(() => {
       newData.forEach((row, rowIndex) => {
+        const weightage = Number(row[TABLE_COL.WEIGHTAGE]) || 0;
         const totalQty = Number(row[TABLE_COL.TOTAL_QTY]) || 0;
         const todayVal = Number(row[TABLE_COL.TODAY]) || 0;
+        const yesterdayVal = Number(row[TABLE_COL.YESTERDAY]) || 0;
+
+        // Update Weightage
+        hfInstance.setCellContents(
+          { sheet: sheetId, row: rowIndex, col: COL.WEIGHTAGE },
+          weightage
+        );
 
         // Update Total Quantity in HyperFormula (affects Balance)
         hfInstance.setCellContents(
@@ -323,7 +436,6 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
         );
 
         // Update Yesterday in HyperFormula (affects Cumulative)
-        const yesterdayVal = Number(row[TABLE_COL.YESTERDAY]) || 0;
         hfInstance.setCellContents(
           { sheet: sheetId, row: rowIndex, col: COL.YESTERDAY },
           yesterdayVal
@@ -332,7 +444,9 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
     });
 
     // Read back calculated values and update state
-    const updatedData = newData.map((row, rowIndex) => {
+    const actualDataRows = newData.slice(0, filteredData.length);
+
+    const updatedData = actualDataRows.map((row, rowIndex) => {
       // Get calculated Balance from HyperFormula
       const hfBalance = hfInstance.getCellValue({ sheet: sheetId, row: rowIndex, col: COL.BALANCE });
       let calculatedBalance = String(row[TABLE_COL.BALANCE] || "");
@@ -352,21 +466,23 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
       }
 
       return {
-        ...data[rowIndex],
-        slNo: "",
-        description: row[0] || "",
+        ...filteredData[rowIndex],
+        activityId: String(row[TABLE_COL.ACTIVITY_ID] || ""),
+        block: String(row[TABLE_COL.BLOCK] || ""),
+        description: String(row[TABLE_COL.DESCRIPTION] || ""),
+        weightage: String(row[TABLE_COL.WEIGHTAGE] || ""),
         totalQuantity: String(row[TABLE_COL.TOTAL_QTY] || ""),
-        uom: row[2] || "",
+        uom: String(row[TABLE_COL.UOM] || ""),
         balance: calculatedBalance,
-        basePlanStart: row[4] || "",
-        basePlanFinish: row[5] || "",
-        actualStart: row[6] || "",
-        actualFinish: row[7] || "",
-        forecastStart: row[8] || "",
-        forecastFinish: row[9] || "",
-        remarks: row[10] || "",
+        basePlanStart: String(row[TABLE_COL.BASE_PLAN_START] || ""),
+        basePlanFinish: String(row[TABLE_COL.BASE_PLAN_FINISH] || ""),
+        actualStart: String(row[TABLE_COL.ACTUAL_START] || ""),
+        actualFinish: String(row[TABLE_COL.ACTUAL_FINISH] || ""),
+        forecastStart: String(row[TABLE_COL.FORECAST_START] || ""),
+        forecastFinish: String(row[TABLE_COL.FORECAST_FINISH] || ""),
+        remarks: String(row[TABLE_COL.REMARKS] || ""),
         cumulative: calculatedCumulative,
-        yesterday: row[12] || "",
+        yesterday: String(row[TABLE_COL.YESTERDAY] || ""),
         today: String(row[TABLE_COL.TODAY] || "")
       };
     });
@@ -380,9 +496,17 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
       y: d.yesterday,
       qty: d.totalQuantity
     })));
-
-    setData(updatedData);
-  }, [setData, hfInstance, sheetNameRef, COL]);
+    if (selectedBlock !== "ALL") {
+      const fullDataCopy = [...data];
+      updatedData.forEach(updatedRow => {
+          const idx = fullDataCopy.findIndex(d => d.activityId === updatedRow.activityId);
+          if (idx !== -1) fullDataCopy[idx] = updatedRow;
+      });
+      setData(fullDataCopy);
+    } else {
+      setData(updatedData);
+    }
+  }, [setData, data, filteredData, hfInstance, sheetNameRef, COL, selectedBlock]);
 
   return (
     <div className="space-y-4 w-full">
@@ -397,7 +521,9 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
         isReadOnly={isLocked}
         editableColumns={editableColumns}
         columnTypes={{
+          "Block": "text",
           "Description": "text",
+          "Weightage": "number",
           "Scope": "number",
           "UOM": "text",
           "Balance": "number",
@@ -429,7 +555,10 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
         headerStructure={[
           // First header row - main column names
           [
+            { label: "Activity ID", colSpan: 1 },
+            { label: "Block", colSpan: 1 },
             { label: "Description", colSpan: 1 },
+            { label: "Weightage", colSpan: 1 },
             { label: "Scope", colSpan: 1 },
             { label: "UOM", colSpan: 1 },
             { label: "Balance", colSpan: 1 },
@@ -448,6 +577,11 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
         status={status} // Pass status to StyledExcelTable
         onExportAll={onExportAll}
         onFullscreenToggle={onFullscreenToggle}
+        onReachEnd={onReachEnd}
+        rowStyles={rowStyles}
+        externalGlobalFilter={universalFilter}
+        projectId={projectId}
+        sheetType="dp_qty"
       />
     </div>
   );

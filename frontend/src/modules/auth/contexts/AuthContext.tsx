@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, AuthResponse, SSOAuthResponse, loginUser, getUserProfile, refreshAccessToken, logoutUser, ssoLogin as ssoLoginService } from '../services/authService';
+import { loginUser, getUserProfile, refreshAccessToken, logoutUser, ssoLogin as ssoLoginService } from '@/services/userService';
+import { User, AuthResponse, SSOAuthResponse } from '@/types';
 
 interface AuthContextType {
   user: User | null;
@@ -29,7 +30,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('token'));
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const isPendingApproval = user?.Role === 'pending_approval';
+  const isPendingApproval = (user?.role || user?.Role) === 'pending_approval';
 
   useEffect(() => {
     const storedToken = localStorage.getItem('token');

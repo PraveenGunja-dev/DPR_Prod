@@ -174,9 +174,9 @@ router.post('/register', async (req, res, next) => {
     }
 
     // Validate password strength (at least 8 characters)
-    if (password.length < 8) {
+    if (password.length < 15) {
       return res.status(400).json({
-        message: 'Password must be at least 8 characters long'
+        message: 'Password must be at least 15 characters long (Adani Password Policy)'
       });
     }
 

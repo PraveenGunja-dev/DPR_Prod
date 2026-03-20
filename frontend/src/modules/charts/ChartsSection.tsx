@@ -25,7 +25,7 @@ import {
   Legend,
   ComposedChart
 } from 'recharts';
-import { getAllChartsData } from '@/modules/auth/services/chartService';
+import { getAllChartsData } from '@/services/chartService';
 
 // Theme-aware colors
 const CHART_COLORS = {

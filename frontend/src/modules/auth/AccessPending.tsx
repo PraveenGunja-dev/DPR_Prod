@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { requestAccess } from './services/authService';
+import { requestAccess } from '@/services/userService';
 import { useAuth } from './contexts/AuthContext';
 import { Clock, Shield, Send, CheckCircle2, AlertCircle, LogOut } from 'lucide-react';
 

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserPlus, Loader2, User, Mail, Lock } from "lucide-react";
 import { toast } from "sonner";
-import { registerUser } from "@/modules/auth/services/authService";
+import { registerUser } from "@/services/userService";
 
 interface CreateUserModalProps {
     isOpen: boolean;

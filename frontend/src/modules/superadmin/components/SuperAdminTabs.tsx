@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Users, FolderPlus, Settings, FileText, BarChart3, ShieldCheck } from 'lucide-react';
-import { getAccessRequestCount } from '@/modules/auth/services/authService';
+import { getAccessRequestCount } from '@/services/userService';
 
 interface SuperAdminTabsProps {
   activeTab: string;

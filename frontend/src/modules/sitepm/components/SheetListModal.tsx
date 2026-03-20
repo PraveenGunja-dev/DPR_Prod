@@ -26,7 +26,7 @@ import {
     DPVendorIdtTable,
     MmsModuleRfiTable
 } from "@/modules/supervisor/components";
-import { getTodayAndYesterday } from "@/modules/auth/services/dprSupervisorService";
+import { getTodayAndYesterday } from "@/services/dprService";
 
 interface SheetEntry {
     id: number;
@@ -83,6 +83,7 @@ const getSheetTypeLabel = (sheetType: string) => {
 };
 
 const getIcon = (title: string) => {
+    if (!title) return <FileText className="h-5 w-5" />;
     switch (title.toLowerCase()) {
         case "total sheets":
             return <FileText className="h-5 w-5" />;

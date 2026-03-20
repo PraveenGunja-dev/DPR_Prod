@@ -17,7 +17,7 @@ import { ProtectedRoute } from "@/modules/auth/components/ProtectedRoute"
 import { ThemeProvider } from "@/components/ThemeProvider"
 import AccessPending from "@/modules/auth/AccessPending"
 import { ChartsPage } from "@/modules/charts"
-import { InfiniteScrollDemoPage } from "@/pages/InfiniteScrollDemoPage"
+
 
 const queryClient = new QueryClient()
 const App = () => (
@@ -88,14 +88,7 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/infinite-scroll-demo"
-                  element={
-                    <ProtectedRoute>
-                      <InfiniteScrollDemoPage />
-                    </ProtectedRoute>
-                  }
-                />
+
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>

@@ -40,9 +40,9 @@ const processQueue = (error: Error | null, token: string | null = null) => {
 // Request interceptor - add auth token to all requests
 apiClient.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
-        // Fix for subpath deployment: remove leading slash from URL if baseURL is relative path
-        // This prevents Axios from treating the URL as absolute-to-host
-        if (config.url && config.url.startsWith('/') && !import.meta.env.VITE_API_BASE_URL) {
+        // Fix: remove leading slash from URL if baseURL is present
+        // This ensures the URL is appended to baseURL instead of being treated as absolute-to-host
+        if (config.url && config.url.startsWith('/') && config.baseURL) {
             config.url = config.url.substring(1);
         }
 

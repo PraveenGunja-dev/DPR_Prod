@@ -20,7 +20,10 @@ export interface P6Activity {
     plannedFinishDate: string | null;
     actualStartDate: string | null;
     actualFinishDate: string | null;
+    forecastStartDate: string | null;
     forecastFinishDate: string | null;
+    baselineStartDate: string | null;
+    baselineFinishDate: string | null;
 
     // From resourceAssignments - exact P6 names
     targetQty: number | null;
@@ -58,8 +61,10 @@ export interface P6Activity {
     priority: string | null;
     plot: string | null;
     newBlockNom: string | null;
+    weightage: number | null;
 
-    // Local editable
+    // Values from DB
+    balance?: string;
     cumulative?: string;
     yesterday?: string;
     today?: string;
@@ -99,7 +104,7 @@ export interface DPQtyResponse {
 export const getP6ActivitiesPaginated = async (
     projectObjectId: number | string,
     page: number = 1,
-    limit: number = 100
+    limit: number = 5000
 ): Promise<P6ActivitiesResponse> => {
     try {
         const response = await apiClient.get<any>(
@@ -129,7 +134,10 @@ export const getP6ActivitiesPaginated = async (
             plannedFinishDate: formatDate(a.plannedFinishDate),
             actualStartDate: formatDate(a.actualStartDate),
             actualFinishDate: formatDate(a.actualFinishDate),
+            forecastStartDate: formatDate(a.forecastStartDate),
             forecastFinishDate: formatDate(a.forecastFinishDate),
+            baselineStartDate: formatDate(a.baselineStartDate),
+            baselineFinishDate: formatDate(a.baselineFinishDate),
 
             // From resourceAssignments
             targetQty: parseNumber(a.targetQty),
@@ -142,7 +150,7 @@ export const getP6ActivitiesPaginated = async (
             percentComplete: parseNumber(a.percentComplete),
 
             // From resources
-            contractorName: a.contractorName || null,
+            contractorName: a.contractorName || a.primaryResource || null,
             unitOfMeasure: a.unitOfMeasure || null,
             resourceType: a.resourceType || null,
 
@@ -166,7 +174,12 @@ export const getP6ActivitiesPaginated = async (
             // Activity Codes
             priority: a.priority || null,
             plot: a.plot || null,
-            newBlockNom: a.newBlockNom || null
+            newBlockNom: a.newBlockNom || null,
+            weightage: parseNumber(a.weightage),
+
+            // Values from DB
+            balance: a.balance !== null && a.balance !== undefined ? String(a.balance) : "",
+            cumulative: a.cumulative !== null && a.cumulative !== undefined ? String(a.cumulative) : "",
         }));
 
         console.log(`Fetched ${activities.length} P6 activities for project ${projectObjectId}`);
@@ -249,7 +262,8 @@ export const getDPQtyActivities = async (projectObjectId: number | string): Prom
 };
 
 export const getP6ActivitiesForProject = async (projectObjectId: number | string): Promise<P6Activity[]> => {
-    const response = await getP6ActivitiesPaginated(projectObjectId, 1, 100);
+    // Increase limit to 5000 to ensure we get all activities for the project
+    const response = await getP6ActivitiesPaginated(projectObjectId, 1, 5000);
     return response.activities;
 };
 
@@ -286,16 +300,18 @@ export const mapActivitiesToDPQty = (activities: P6Activity[]) => {
         description: a.name || "", // Mapped from name
         totalQuantity: a.targetQty !== null ? String(a.targetQty) : "", // Mapped from targetQty
         uom: a.unitOfMeasure || "", // Mapped from unitOfMeasure
-        balance: "", // Calculated field
-        basePlanStart: a.plannedStartDate ? a.plannedStartDate.split('T')[0] : "", // Mapped from plannedStartDate
-        basePlanFinish: a.plannedFinishDate ? a.plannedFinishDate.split('T')[0] : "", // Mapped from plannedFinishDate
-        forecastStart: a.plannedStartDate ? a.plannedStartDate.split('T')[0] : "", // Using planned as forecast init
+        balance: a.balance || "", // From DB sync
+        basePlanStart: a.baselineStartDate ? a.baselineStartDate.split('T')[0] : (a.plannedStartDate ? a.plannedStartDate.split('T')[0] : ""),
+        basePlanFinish: a.baselineFinishDate ? a.baselineFinishDate.split('T')[0] : (a.plannedFinishDate ? a.plannedFinishDate.split('T')[0] : ""),
+        forecastStart: a.forecastStartDate ? a.forecastStartDate.split('T')[0] : (a.plannedStartDate ? a.plannedStartDate.split('T')[0] : ""),
         forecastFinish: a.forecastFinishDate ? a.forecastFinishDate.split('T')[0] : (a.plannedFinishDate ? a.plannedFinishDate.split('T')[0] : ""),
         actualStart: a.actualStartDate ? a.actualStartDate.split('T')[0] : "",
         actualFinish: a.actualFinishDate ? a.actualFinishDate.split('T')[0] : "",
-        percentComplete: a.percentComplete !== null ? String(a.percentComplete) : "",
+        percentComplete: a.percentComplete !== null ? (a.percentComplete === 100 ? "100.00%" : (String(a.percentComplete.toFixed(2)) + "%")) : "",
         remarks: a.remarks || "",
         cumulative: a.cumulative || "",
+        block: (a.block || a.newBlockNom || a.plot || "").toUpperCase(),
+        weightage: a.weightage !== null && a.weightage !== undefined ? String(a.weightage) : "",
         yesterday: a.yesterday || "",
         yesterdayIsApproved: a.yesterdayIsApproved,
         today: a.today || ""
@@ -308,7 +324,7 @@ export const mapActivitiesToDPBlock = (activities: P6Activity[]) => {
         activities: a.name || "", // Mapped from name
         blockCapacity: a.blockCapacity || "",
         phase: a.phase || "",
-        block: a.block || "",
+        block: (a.block || a.newBlockNom || a.plot || "").toUpperCase(),
         spvNumber: a.spvNumber || "",
         priority: a.priority || "",
         scope: a.scope || "",
@@ -317,12 +333,12 @@ export const mapActivitiesToDPBlock = (activities: P6Activity[]) => {
         completed: a.actualQty !== null ? String(a.actualQty) : "",
         balance: a.remainingQty !== null ? String(a.remainingQty) : "",
 
-        // Date mapping
-        baselineStartDate: a.plannedStartDate ? a.plannedStartDate.split('T')[0] : "",
-        baselineEndDate: a.plannedFinishDate ? a.plannedFinishDate.split('T')[0] : "",
+        // Date mapping - use baseline/forecast from P6 sync, fallback to planned
+        baselineStartDate: a.baselineStartDate ? a.baselineStartDate.split('T')[0] : (a.plannedStartDate ? a.plannedStartDate.split('T')[0] : ""),
+        baselineEndDate: a.baselineFinishDate ? a.baselineFinishDate.split('T')[0] : (a.plannedFinishDate ? a.plannedFinishDate.split('T')[0] : ""),
         actualStartDate: a.actualStartDate ? a.actualStartDate.split('T')[0] : "",
         actualFinishDate: a.actualFinishDate ? a.actualFinishDate.split('T')[0] : "",
-        forecastStartDate: a.plannedStartDate ? a.plannedStartDate.split('T')[0] : "",
+        forecastStartDate: a.forecastStartDate ? a.forecastStartDate.split('T')[0] : (a.plannedStartDate ? a.plannedStartDate.split('T')[0] : ""),
         forecastFinishDate: a.forecastFinishDate ? a.forecastFinishDate.split('T')[0] : (a.plannedFinishDate ? a.plannedFinishDate.split('T')[0] : ""),
         yesterdayIsApproved: a.yesterdayIsApproved
     }));
@@ -333,6 +349,7 @@ export const mapActivitiesToDPVendorBlock = (activities: P6Activity[]) => {
         activityId: a.activityId || "",
         activities: a.name || "", // Mapped from name
         plot: a.plot || "",
+        block: (a.block || a.newBlockNom || a.plot || "").toUpperCase(),
         newBlockNom: a.newBlockNom || "",
         priority: a.priority || "",
         baselinePriority: a.priority || "", // Default to priority if baseline not available
@@ -340,8 +357,8 @@ export const mapActivitiesToDPVendorBlock = (activities: P6Activity[]) => {
         scope: a.scope || "",
         holdDueToWtg: a.holdDueToWTG || "", // Case fix
         front: a.front || "",
-        actual: a.actualQty !== null ? String(a.actualQty) : "",
-        completionPercentage: a.percentComplete !== null ? String(a.percentComplete) : "",
+        actual: a.cumulative || "", // Use cumulative for Actual units as requested
+        completionPercentage: a.percentComplete !== null ? (a.percentComplete === 100 ? "100.00%" : (String(a.percentComplete.toFixed(2)) + "%")) : "",
         remarks: a.remarks || "",
         yesterdayValue: a.yesterday || "",
         yesterdayIsApproved: a.yesterdayIsApproved,
@@ -355,7 +372,7 @@ export const mapActivitiesToManpowerDetails = (activities: P6Activity[]) => {
         .map((a, index) => ({
             slNo: String(index + 1),
             activityId: a.activityId || "",
-            block: a.block || "",
+            block: (a.block || a.newBlockNom || a.plot || "").toUpperCase(),
             contractorName: a.contractorName || "",
             activity: a.name || "", // Mapped from name
             section: "", // Not directly in P6 activity, maybe UDF?
@@ -370,6 +387,7 @@ export const mapActivitiesToDPVendorIdt = (activities: P6Activity[]) => {
         activityId: a.activityId || "",
         activities: a.name || "", // Mapped from name
         plot: a.plot || "",
+        block: (a.block || a.newBlockNom || a.plot || "").toUpperCase(),
         newBlockNom: a.newBlockNom || "",
         baselinePriority: a.priority || "",
         scope: a.scope || "",
@@ -378,8 +396,8 @@ export const mapActivitiesToDPVendorIdt = (activities: P6Activity[]) => {
         contractorName: a.contractorName || "",
         remarks: a.remarks || "",
         holdDueToWtg: a.holdDueToWTG || "", // Case fix
-        actual: a.actualQty !== null ? String(a.actualQty) : "",
-        completionPercentage: a.percentComplete !== null ? String(a.percentComplete) : "",
+        actual: a.cumulative || "", // Use cumulative for Actual units as requested
+        completionPercentage: a.percentComplete !== null ? (a.percentComplete === 100 ? "100.00%" : (String(a.percentComplete.toFixed(2)) + "%")) : "",
         yesterdayValue: a.yesterday || "",
         yesterdayIsApproved: a.yesterdayIsApproved,
         todayValue: a.today || ""

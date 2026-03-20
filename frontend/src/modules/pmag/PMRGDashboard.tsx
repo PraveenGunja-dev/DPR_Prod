@@ -5,8 +5,8 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/modules/auth/contexts/AuthContext";
 import { useNotification } from "@/modules/auth/contexts/NotificationContext";
-import { registerUser } from "@/modules/auth/services/authService";
-import { createProject, assignProjectToSupervisor } from "@/modules/auth/services/projectService";
+import { registerUser } from "@/services/userService";
+import { createProject, assignProjectToSupervisor } from "@/services/projectService";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/shared/DashboardLayout";
 import { PMRGDashboardSummary, PMRGSheetEntries, PMRGChartsSection, PMRGProjectsTable } from "./pmrg-components";
@@ -242,7 +242,7 @@ const PMRGDashboard = () => {
 
     try {
       // First create the user
-      const userData: Omit<import('@/modules/auth/services/authService').User, 'ObjectId'> = {
+      const userData: Omit<import('@/types').User, 'ObjectId'> & { password?: string, Role: string } = {
         Name: registerForm.Name,
         Email: registerForm.Email,
         password: registerForm.password,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { StyledExcelTable } from "@/components/StyledExcelTable";
 import { StatusChip } from "@/components/StatusChip";
 
@@ -44,9 +44,13 @@ interface DPBlockTableProps {
   onExportAll?: () => void;
   totalRows?: number;
   onFullscreenToggle?: (isFullscreen: boolean) => void;
+  onReachEnd?: () => void;
+  universalFilter?: string;
+  projectId?: number;
+  selectedBlock?: string;
 }
 
-export function DPBlockTable({ data, setData, onSave, onSubmit, yesterday, today, isLocked = false, status = 'draft', onExportAll, totalRows, onFullscreenToggle }: DPBlockTableProps) {
+export function DPBlockTable({ data, setData, onSave, onSubmit, yesterday, today, isLocked = false, status = 'draft', onExportAll, totalRows, onFullscreenToggle, onReachEnd, universalFilter, projectId, selectedBlock = "ALL" }: DPBlockTableProps) {
 
 
   // Define columns - 18 columns total (no Yesterday/Today)
@@ -95,36 +99,50 @@ export function DPBlockTable({ data, setData, onSave, onSubmit, yesterday, today
 
   // Define which columns are editable by the user
   const editableColumns = [
+    "Phase",
+    "Priority",
+    "Hold",
+    "Front",
     "Actual Start",
     "Actual Finish"
   ];
 
+  // Filter data based on selected block
+  const filteredData = useMemo(() => {
+    if (!Array.isArray(data)) return [];
+    if (selectedBlock === "ALL") return data;
+    return data.filter(d => d.block === selectedBlock);
+  }, [data, selectedBlock]);
+
   // Convert array of objects to array of arrays
-  const tableData = (Array.isArray(data) ? data : []).map(row => [
-    row.activityId || '',
-    row.activities || '',
-    row.blockCapacity || '',
-    row.phase || '',
-    row.block || '',
-    row.spvNumber || '',
-    row.priority || '',
-    row.scope || '',
-    row.hold || '',
-    row.front || '',
-    row.completed || '',
-    row.balance || '',
-    row.baselineStartDate || '',
-    row.baselineEndDate || '',
-    row.actualStartDate || '',
-    row.actualFinishDate || '',
-    row.forecastStartDate || '',
-    row.forecastFinishDate || ''
-  ]);
+  const tableData = useMemo(() => {
+    return (Array.isArray(filteredData) ? filteredData : []).map(row => [
+      row.activityId || '',
+      row.activities || '',
+      row.blockCapacity || '',
+      row.phase || '',
+      row.block || '',
+      row.spvNumber || '',
+      row.priority || '',
+      row.scope || '',
+      row.hold || '',
+      row.front || '',
+      row.completed || '',
+      row.balance || '',
+      row.baselineStartDate || '',
+      row.baselineEndDate || '',
+      row.actualStartDate || '',
+      row.actualFinishDate || '',
+      row.forecastStartDate || '',
+      row.forecastFinishDate || ''
+    ]);
+  }, [filteredData]);
 
   // Handle data changes from ExcelTable
   const handleDataChange = (newData: any[][]) => {
-    const updatedData = newData.map((row, index) => ({
-      ...data[index],
+    const actualDataRows = newData.slice(0, filteredData.length);
+    const updatedData = actualDataRows.map((row, index) => ({
+      ...filteredData[index],
       activityId: row[0] || '',
       activities: row[1] || '',
       blockCapacity: row[2] || '',
@@ -144,7 +162,17 @@ export function DPBlockTable({ data, setData, onSave, onSubmit, yesterday, today
       forecastStartDate: row[16] || '',
       forecastFinishDate: row[17] || ''
     }));
-    setData(updatedData);
+
+    if (selectedBlock !== "ALL") {
+      const fullDataCopy = [...data];
+      updatedData.forEach(updatedRow => {
+          const idx = fullDataCopy.findIndex(d => d.activityId === updatedRow.activityId);
+          if (idx !== -1) fullDataCopy[idx] = updatedRow;
+      });
+      setData(fullDataCopy);
+    } else {
+      setData(updatedData);
+    }
   };
 
   return (
@@ -217,6 +245,10 @@ export function DPBlockTable({ data, setData, onSave, onSubmit, yesterday, today
         status={status}
         onExportAll={onExportAll}
         onFullscreenToggle={onFullscreenToggle}
+        onReachEnd={onReachEnd}
+        externalGlobalFilter={universalFilter}
+        projectId={projectId}
+        sheetType="dp_block"
       />
     </div>
   );

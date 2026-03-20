@@ -6,9 +6,13 @@ const path = require('path');
 const envPath = path.resolve(__dirname, '../.env');
 dotenv.config({ path: envPath });
 
-const azureUrl = "postgres://psqladmin:1k8h02grUu%2BqJ2uHZb%3C%7BlB3LF%25%2BYj-Ar@az10psqldmrcbtp01.postgres.database.azure.com:5432/DPR_Project?sslmode=require";
+const azureUrl = process.env.DATABASE_URL;
 
 async function checkAzureSchema() {
+    if (!azureUrl) {
+        console.error('DATABASE_URL not found in environment');
+        return;
+    }
     const pool = new Pool({
         connectionString: azureUrl,
         ssl: { rejectUnauthorized: false }

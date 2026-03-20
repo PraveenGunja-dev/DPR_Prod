@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { StyledExcelTable } from "@/components/StyledExcelTable";
 import { StatusChip } from "@/components/StatusChip";
 
@@ -42,6 +42,10 @@ interface DPVendorIdtTableProps {
   onExportAll?: () => void;
   totalRows?: number;
   onFullscreenToggle?: (isFullscreen: boolean) => void;
+  onReachEnd?: () => void;
+  universalFilter?: string;
+  projectId?: number;
+  selectedBlock?: string;
 }
 
 export function DPVendorIdtTable({
@@ -55,7 +59,11 @@ export function DPVendorIdtTable({
   status = 'draft',
   onExportAll,
   totalRows,
-  onFullscreenToggle
+  onFullscreenToggle,
+  onReachEnd,
+  universalFilter,
+  projectId,
+  selectedBlock = "ALL"
 }: DPVendorIdtTableProps) {
 
 
@@ -77,54 +85,64 @@ export function DPVendorIdtTable({
     today
   ];
 
+  // Filter data based on selected block
+  const filteredData = useMemo(() => {
+    if (!Array.isArray(data)) return [];
+    if (selectedBlock === "ALL") return data;
+    return data.filter(d => d.isCategoryRow || d.block === selectedBlock || d.newBlockNom === selectedBlock);
+  }, [data, selectedBlock]);
+
   // Convert array of objects to array of arrays
-  const tableData = (Array.isArray(data) ? data : []).map(row => {
-    if (row.isCategoryRow) {
-      // Category row - only show category in first column, rest empty
-      return [
-        row.category || '',
-        '', '', '', '', '', '', '', '', '', '', '',
-        '', ''
-      ];
-    } else {
-      // Activity row - show all data
-      return [
-        row.activityId || '',
-        row.activities || '',
-        row.plot || '',
-        row.newBlockNom || '',
-        row.priority || '',
-        row.baselinePriority || '',
-        row.contractorName || '',
-        row.scope || '',
-        row.front || '',
-        row.actual || '',
-        row.completionPercentage || '',
-        row.remarks || '',
-        row.yesterdayValue || '', // Number value for yesterday
-        row.todayValue || '' // Number value for today (editable)
-      ];
-    }
-  });
+  const tableData = useMemo(() => {
+    return (Array.isArray(filteredData) ? filteredData : []).map(row => {
+        if (row.isCategoryRow) {
+        // Category row - only show category in first column, rest empty
+        return [
+            row.category || '',
+            '', '', '', '', '', '', '', '', '', '', '',
+            '', ''
+        ];
+        } else {
+        // Activity row - show all data
+        return [
+            row.activityId || '',
+            row.activities || '',
+            row.plot || '',
+            row.newBlockNom || row.block || '',
+            row.priority || '',
+            row.baselinePriority || '',
+            row.contractorName || '',
+            row.scope || '',
+            row.front || '',
+            row.actual || '',
+            row.completionPercentage || '',
+            row.remarks || '',
+            row.yesterdayValue || '', // Number value for yesterday
+            row.todayValue || '' // Number value for today (editable)
+        ];
+        }
+    });
+  }, [filteredData, yesterday, today]);
 
   // Create row styles for category rows
-  const rowStyles: Record<number, any> = {};
-  const safeData = Array.isArray(data) ? data : [];
-  safeData.forEach((row, index) => {
-    if (row.isCategoryRow) {
-      rowStyles[index] = {
-        backgroundColor: '#49415B',
-        color: '#ffffff',
-        fontWeight: 'bold'
-      };
-    }
-  });
+  const rowStyles = useMemo(() => {
+    const styles: Record<number, any> = {};
+    filteredData.forEach((row, index) => {
+        if (row.isCategoryRow) {
+        styles[index] = {
+            backgroundColor: '#49415B',
+            color: '#ffffff',
+            fontWeight: 'bold'
+        };
+        }
+    });
+    return styles;
+  }, [filteredData]);
 
   // Dynamically color cells based on approval status
-  const cellTextColors = React.useMemo(() => {
+  const cellTextColors = useMemo(() => {
     const colors: Record<number, Record<string, string>> = {};
-    const safeData = Array.isArray(data) ? data : [];
-    safeData.forEach((row, rowIndex) => {
+    filteredData.forEach((row, rowIndex) => {
       if (row.yesterdayIsApproved === false) {
         colors[rowIndex] = {
           [yesterday]: "#ce440d", // Darker orange
@@ -138,13 +156,14 @@ export function DPVendorIdtTable({
       }
     });
     return colors;
-  }, [data, yesterday]);
+  }, [filteredData, yesterday]);
 
   // Handle data changes from ExcelTable
   const handleDataChange = (newData: any[][]) => {
     // Convert array of arrays back to array of objects
-    const updatedData = newData.map((row, index) => {
-      const originalRow = data[index];
+    const actualDataRows = newData.slice(0, filteredData.length);
+    const updatedRows = actualDataRows.map((row, index) => {
+      const originalRow = filteredData[index];
 
       if (originalRow?.isCategoryRow) {
         // Category row - preserve category data
@@ -186,12 +205,23 @@ export function DPVendorIdtTable({
         };
       }
     });
-    setData(updatedData);
+    
+    if (selectedBlock !== "ALL") {
+        const fullDataCopy = [...data];
+        updatedRows.forEach(updatedRow => {
+            const idx = fullDataCopy.findIndex(d => d.activityId === updatedRow.activityId);
+            if (idx !== -1) fullDataCopy[idx] = updatedRow;
+        });
+        setData(fullDataCopy);
+    } else {
+        setData(updatedRows);
+    }
   };
 
   // Define which columns are editable
   const editableColumns = [
     "Priority",
+    "Baseline Priority",
     "Contractor Name",
     "Scope",
     "Front",
@@ -280,6 +310,10 @@ export function DPVendorIdtTable({
         status={status} // Pass status to StyledExcelTable
         onExportAll={onExportAll}
         onFullscreenToggle={onFullscreenToggle}
+        onReachEnd={onReachEnd}
+        externalGlobalFilter={universalFilter}
+        projectId={projectId}
+        sheetType="dp_vendor_idt"
       />
     </div>
   );

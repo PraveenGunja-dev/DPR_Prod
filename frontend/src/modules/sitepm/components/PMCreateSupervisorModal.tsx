@@ -5,8 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { registerUser } from "@/modules/auth/services/authService";
-import { assignProjectToSupervisor } from "@/modules/auth/services/projectService";
+import { registerUser } from "@/services/userService";
+import { assignProjectToSupervisor } from "@/services/projectService";
 
 interface PMCreateSupervisorModalProps {
   isOpen: boolean;
@@ -43,7 +43,7 @@ export const PMCreateSupervisorModal: React.FC<PMCreateSupervisorModalProps> = (
     
     try {
       // First create the supervisor - Site PM can only create supervisors
-      const userData: Omit<import('@/modules/auth/services/authService').User, 'ObjectId'> = {
+      const userData: Omit<import('@/types').User, 'ObjectId'> & { password?: string, Role: string } = {
         Name: supervisorForm.Name,
         Email: supervisorForm.Email,
         password: supervisorForm.password,

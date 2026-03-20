@@ -26,9 +26,9 @@ interface MmsModuleRfiTableProps {
   today: string;
   isLocked?: boolean;
   status?: 'draft' | 'submitted_to_pm' | 'approved_by_pm' | 'rejected_by_pm' | 'final_approved' | 'approved_by_pmag' | 'archived';
-
   onExportAll?: () => void;
   onFullscreenToggle?: (isFullscreen: boolean) => void;
+  universalFilter?: string;
 }
 
 export function MmsModuleRfiTable({
@@ -41,7 +41,8 @@ export function MmsModuleRfiTable({
   isLocked = false,
   status = 'draft',
   onExportAll,
-  onFullscreenToggle
+  onFullscreenToggle,
+  universalFilter
 }: MmsModuleRfiTableProps) {
 
 
@@ -138,6 +139,7 @@ export function MmsModuleRfiTable({
         onExportAll={onExportAll}
         totalRows={undefined}
         onFullscreenToggle={onFullscreenToggle}
+        externalGlobalFilter={universalFilter}
       />
     </div>
   );

@@ -15,6 +15,7 @@ import { PublicClientApplication } from "@azure/msal-browser";
 import { msalConfig, loginRequest } from "@/config/msalConfig";
 import Particles, { initParticlesEngine } from "@tsparticles/react";
 import { loadFull } from "tsparticles";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 // Initialize MSAL instance
 let msalInstance: PublicClientApplication | null = null;
@@ -166,21 +167,22 @@ const LoginForm = () => {
               onClick={handleSSOLogin}
               disabled={ssoLoading || !msalReady}
               variant="outline"
-              className="relative w-full max-w-sm py-8 border-[#0B74B0]/40 bg-[#0B74B0]/5 hover:bg-[#0B74B0]/10 hover:border-[#0B74B0]/60 transition-all duration-300 flex items-center justify-center uppercase tracking-[0.1em] rounded-2xl shadow-sm"
+              className="group relative w-full max-w-sm h-16 border-[#0B74B0]/30 bg-[#0B74B0]/5 hover:bg-[#0B74B0]/10 hover:border-[#0B74B0]/60 transition-all duration-300 rounded-2xl shadow-sm overflow-hidden"
             >
-              {ssoLoading ? (
-                <span className="flex items-center justify-center text-[#0B74B0] dark:text-white font-bold">
-                  <span className="h-5 w-5 rounded-full border-2 border-[#0B74B0] border-t-transparent animate-spin mr-3"></span>
-                  CONNECTING...
-                </span>
-              ) : (
-                <>
-                  <div className="absolute left-6">
-                    <MicrosoftIcon />
+              <div className="flex items-center justify-center gap-4 w-full">
+                {ssoLoading ? (
+                  <div className="flex items-center gap-3 text-[#0B74B0] dark:text-white font-bold tracking-widest text-xs">
+                    <div className="h-4 w-4 rounded-full border-2 border-[#0B74B0] border-t-transparent animate-spin"></div>
+                    CONNECTING...
                   </div>
-                  <span className="ml-[0.1em] text-[#0B74B0] dark:text-white font-bold">MICROSOFT SSO</span>
-                </>
-              )}
+                ) : (
+                  <>
+                    <MicrosoftIcon />
+                    <span className="text-[#0B74B0] dark:text-white font-bold tracking-[0.15em] text-xs uppercase">Microsoft SSO</span>
+                  </>
+                )}
+              </div>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
             </Button>
 
             {/* Email Login Button */}
@@ -188,12 +190,12 @@ const LoginForm = () => {
               type="button"
               onClick={() => setLoginMode('credentials')}
               variant="outline"
-              className="relative w-full max-w-sm py-8 border-[#333333]/20 dark:border-white/20 bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800/50 hover:border-[#333333]/50 dark:hover:border-white/50 transition-all duration-300 flex items-center justify-center uppercase tracking-[0.1em] rounded-2xl shadow-sm group"
+              className="group relative w-full max-w-sm h-16 border-zinc-200 dark:border-white/10 bg-transparent hover:bg-zinc-50 dark:hover:bg-zinc-800/30 hover:border-zinc-400 dark:hover:border-white/30 transition-all duration-300 rounded-2xl shadow-sm"
             >
-              <div className="absolute left-6 text-[#333333] dark:text-white">
-                <FiMail className="w-5 h-5" />
+              <div className="flex items-center justify-center gap-4 w-full">
+                <FiMail className="w-5 h-5 text-zinc-600 dark:text-zinc-400 group-hover:text-primary transition-colors" />
+                <span className="text-zinc-700 dark:text-zinc-200 font-bold tracking-[0.15em] text-xs uppercase group-hover:text-primary transition-colors">Email Access</span>
               </div>
-              <span className="ml-[0.1em] text-[#333333] dark:text-white font-bold">EMAIL ACCESS</span>
             </Button>
             
             {error && (
@@ -359,6 +361,10 @@ export const SmoothScrollHero = () => {
 
       {/* Content layered on top */}
       <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4">
+        {/* Top Right Actions */}
+        <div className="absolute top-6 right-6 z-20">
+          <ThemeToggle />
+        </div>
         
         {/* Main Content Area */}
         <main className="w-full max-w-5xl flex flex-col items-center">

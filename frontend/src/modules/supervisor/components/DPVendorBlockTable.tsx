@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Save } from "lucide-react";
@@ -40,6 +40,10 @@ interface DPVendorBlockTableProps {
   onExportAll?: () => void;
   totalRows?: number;
   onFullscreenToggle?: (isFullscreen: boolean) => void;
+  onReachEnd?: () => void;
+  universalFilter?: string;
+  projectId?: number;
+  selectedBlock?: string;
 }
 
 export function DPVendorBlockTable({
@@ -54,7 +58,11 @@ export function DPVendorBlockTable({
   onExportAll,
   totalRows,
   projectName = "Unknown Project",
-  onFullscreenToggle
+  onFullscreenToggle,
+  onReachEnd,
+  universalFilter,
+  projectId,
+  selectedBlock = "ALL"
 }: DPVendorBlockTableProps) {
 
 
@@ -96,55 +104,67 @@ export function DPVendorBlockTable({
     [today]: 60
   };
 
+  // Filter data based on selected block
+  const filteredData = useMemo(() => {
+    if (!Array.isArray(data)) return [];
+    if (selectedBlock === "ALL") return data;
+    // Filter rows - keep category rows if they precede a matched activity? 
+    // Usually simpler: just filter everything.
+    return data.filter(d => d.isCategoryRow || d.block === selectedBlock);
+  }, [data, selectedBlock]);
+
   // Convert array of objects to array of arrays
-  const tableData = (Array.isArray(data) ? data : []).map(row => {
-    if (row.isCategoryRow) {
-      // Category row - only show category in first column, rest empty
-      return [
-        row.category || '',
-        '', '', '', '', '', '', '', '', '', '', '',
-        '', ''
-      ];
-    } else {
-      // Activity row - show all data
-      return [
-        row.activityId,
-        row.activities,
-        row.plot,
-        row.newBlockNom,
-        row.priority,
-        row.baselinePriority,
-        row.contractorName,
-        row.scope,
-        row.holdDueToWtg,
-        row.front,
-        row.actual,
-        row.completionPercentage,
-        row.remarks,
-        row.yesterdayValue,
-        row.todayValue
-      ];
-    }
-  });
+  const tableData = useMemo(() => {
+    return (Array.isArray(filteredData) ? filteredData : []).map(row => {
+        if (row.isCategoryRow) {
+        // Category row - only show category in first column, rest empty
+        return [
+            row.category || '',
+            '', '', '', '', '', '', '', '', '', '', '',
+            '', '', ''
+        ];
+        } else {
+        // Activity row - show all data
+        return [
+            row.activityId,
+            row.activities,
+            row.plot,
+            row.newBlockNom || row.block || '',
+            row.priority,
+            row.baselinePriority,
+            row.contractorName,
+            row.scope,
+            row.holdDueToWtg,
+            row.front,
+            row.actual,
+            row.completionPercentage,
+            row.remarks,
+            row.yesterdayValue,
+            row.todayValue
+        ];
+        }
+    });
+  }, [filteredData, yesterday, today]);
 
   // Create row styles for category rows
-  const rowStyles: Record<number, any> = {};
-  const safeData = Array.isArray(data) ? data : [];
-  safeData.forEach((row, index) => {
-    if (row.isCategoryRow) {
-      rowStyles[index] = {
-        backgroundColor: '#DFC57B',
-        color: '#000000',
-        fontWeight: 'bold'
-      };
-    }
-  });
+  const rowStyles = useMemo(() => {
+    const styles: Record<number, any> = {};
+    filteredData.forEach((row, index) => {
+        if (row.isCategoryRow) {
+        styles[index] = {
+            backgroundColor: '#DFC57B',
+            color: '#000000',
+            fontWeight: 'bold'
+        };
+        }
+    });
+    return styles;
+  }, [filteredData]);
 
   // Dynamically color cells based on approval status
-  const cellTextColors = React.useMemo(() => {
+  const cellTextColors = useMemo(() => {
     const colors: Record<number, Record<string, string>> = {};
-    const safeData = Array.isArray(data) ? data : [];
-    safeData.forEach((row, rowIndex) => {
+    filteredData.forEach((row, rowIndex) => {
       if (row.yesterdayIsApproved === false) {
         colors[rowIndex] = {
           [yesterday]: "#ce440d", // Darker orange
@@ -158,13 +178,14 @@ export function DPVendorBlockTable({
       }
     });
     return colors;
-  }, [data, yesterday]);
+  }, [filteredData, yesterday]);
 
   // Handle data changes from ExcelTable
   const handleDataChange = (newData: any[][]) => {
     // Convert array of arrays back to array of objects
-    const updatedData = newData.map((row, index) => {
-      const originalRow = data[index];
+    const actualDataRows = newData.slice(0, filteredData.length);
+    const updatedRows = actualDataRows.map((row, index) => {
+      const originalRow = filteredData[index];
 
       if (originalRow?.isCategoryRow) {
         // Category row - preserve category data
@@ -207,7 +228,17 @@ export function DPVendorBlockTable({
         };
       }
     });
-    setData(updatedData);
+    
+    if (selectedBlock !== "ALL") {
+        const fullDataCopy = [...data];
+        updatedRows.forEach(updatedRow => {
+            const idx = fullDataCopy.findIndex(d => d.activityId === updatedRow.activityId);
+            if (idx !== -1) fullDataCopy[idx] = updatedRow;
+        });
+        setData(fullDataCopy);
+    } else {
+        setData(updatedRows);
+    }
   };
 
   return (
@@ -221,7 +252,7 @@ export function DPVendorBlockTable({
         onSave={onSave}
         onSubmit={onSubmit}
         isReadOnly={isLocked}
-        editableColumns={["Priority(user)", "Contractor Name(user)", "Scope(user)", "Hold Due to WTG(user)", "Remarks", yesterday, today]}
+        editableColumns={["Priority(user)", "Baseline Priority(p6)", "Contractor Name(user)", "Scope(user)", "Hold Due to WTG(user)", "Front(auto)", "Remarks", yesterday, today]}
         columnTypes={{
           "Priority(user)": "text",
           "Contractor Name(user)": "text",
@@ -265,6 +296,10 @@ export function DPVendorBlockTable({
         status={status} // Pass status to StyledExcelTable
         onExportAll={onExportAll}
         onFullscreenToggle={onFullscreenToggle}
+        onReachEnd={onReachEnd}
+        externalGlobalFilter={universalFilter}
+        projectId={projectId}
+        sheetType="dp_vendor_block"
       />
     </div>
   );

@@ -12,14 +12,16 @@ interface DPRSummarySectionProps {
   manpowerDetailsData?: any[];
   resourceData?: P6Resource[];
   onExportAll?: () => void;
+  onReachEnd?: () => void;
+  selectedBlock?: string;
 }
 
 // Category definitions for grouping activities
 const CATEGORIES = [
-  { name: 'PILING', patterns: ['piling', 'stub', 'cap', 'cable hanger', 'robot docking'] },
-  { name: 'MMS', patterns: ['mms', 'tracker', 'torque tube', 'module', 'erection'] },
-  { name: 'IDT', patterns: ['idt', 'foundation'] },
-  { name: 'AC_DC', patterns: ['earthing', 'cable', 'dc ', 'ac ', 'laying'] }
+  { name: 'PILING', patterns: ['piling', 'stub', 'cap', 'cable hanger', 'robot docking', 'piling work'] },
+  { name: 'MMS', patterns: ['mms', 'tracker', 'torque tube', 'module', 'erection', 'installation', 'mounting'] },
+  { name: 'IDT', patterns: ['idt', 'foundation', 'inverter', 'transformer'] },
+  { name: 'AC_DC', patterns: ['earthing', 'cable', 'dc ', 'ac ', 'laying', 'wiring', 'trenching'] }
 ];
 
 // Aggregate values from table entries by activity name
@@ -34,20 +36,16 @@ const aggregateTableData = (
 
   // Initialize with P6 activities
   p6Activities.forEach(activity => {
-    // P6Activity uses 'name' (not description)
-    const name = activity.name || '';
-    if (name) {
-      activityMap.set(name.toLowerCase(), {
-        name,
-        uom: activity.unitOfMeasure || '', // Fixed: was 'uom'
-        totalScope: Number(activity.targetQty || 0), // Fixed: was 'totalQuantity'
+    const id = String(activity.activityObjectId || activity.activityId || '');
+    if (id) {
+      activityMap.set(id, {
+        name: activity.name || '',
+        uom: activity.unitOfMeasure || '',
+        totalScope: Number(activity.targetQty || 0),
         front: activity.front || '',
-        // Use actualQty or percentComplete for completed
-        completed: Number(activity.actualQty || activity.percentComplete || 0), // Fixed: was 'actualQuantity'
-        // Cumulative is conceptually Actual in many contexts
-        cumulative: Number(activity.actualQty || 0), // Fixed: was 'actualQuantity'
-        // Balance is Remaining Quantity
-        balance: Number(activity.remainingQty || 0), // Fixed: was 'remainingQuantity'
+        completed: Number(activity.actualQty || activity.percentComplete || 0),
+        cumulative: Number(activity.actualQty || 0),
+        balance: Number(activity.remainingQty || 0),
         percentStatus: Number(activity.percentComplete || 0),
         remarks: activity.remarks || ''
       });
@@ -60,10 +58,10 @@ const aggregateTableData = (
 
   // Merge/update with DP Qty data
   dpQtyData.forEach(entry => {
-    const name = entry.description || '';
-    if (name) {
-      const existing = activityMap.get(name.toLowerCase()) || { name };
-      activityMap.set(name.toLowerCase(), {
+    const id = String(entry.activityObjectId || entry.activityId || '');
+    if (id) {
+      const existing = activityMap.get(id) || { name: entry.description || '' };
+      activityMap.set(id, {
         ...existing,
         totalScope: parseFloat(entry.totalQuantity) || existing.totalScope || 0,
         balance: parseFloat(entry.balance) || existing.balance || 0,
@@ -113,11 +111,12 @@ const groupActivitiesByCategory = (activityMap: Map<string, any>) => {
   CATEGORIES.forEach(category => {
     const matchingActivities: any[] = [];
 
-    activityMap.forEach((data, key) => {
-      if (usedNames.has(key)) return;
-      if (category.patterns.some(pattern => key.includes(pattern))) {
+    activityMap.forEach((data, id) => {
+      if (usedNames.has(id)) return;
+      const lowerName = (data.name || '').toLowerCase();
+      if (category.patterns.some(pattern => lowerName.includes(pattern))) {
         matchingActivities.push(data);
-        usedNames.add(key);
+        usedNames.add(id);
       }
     });
 
@@ -178,7 +177,9 @@ export const DPRSummarySection: React.FC<DPRSummarySectionProps> = ({
   dpVendorIdtData = [],
   manpowerDetailsData = [],
   resourceData = [],
-  onExportAll
+  onExportAll,
+  onReachEnd,
+  selectedBlock = "ALL"
 }) => {
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
   const [activeTable, setActiveTable] = useState<'main' | 'charging' | 'resources'>('main');
@@ -196,14 +197,12 @@ export const DPRSummarySection: React.FC<DPRSummarySectionProps> = ({
 
   // Aggregate and group data dynamically
   const { mainActivityData, rowStyles } = useMemo(() => {
-    if (p6Activities.length === 0 && dpQtyData.length === 0 && dpBlockData.length === 0) {
-      return {
-        mainActivityData: [['No activities loaded', '', '', '', '', '', '', '', '']],
-        rowStyles: {}
-      };
-    }
+    const filteredP6 = selectedBlock === "ALL" ? p6Activities : p6Activities.filter(a => a.block === selectedBlock);
+    const filteredQty = selectedBlock === "ALL" ? dpQtyData : dpQtyData.filter(a => a.block === selectedBlock);
+    const filteredBlock = selectedBlock === "ALL" ? dpBlockData : dpBlockData.filter(a => a.block === selectedBlock);
+    const filteredVendor = selectedBlock === "ALL" ? dpVendorBlockData : dpVendorBlockData.filter(a => a.block === selectedBlock || (a.isCategoryRow));
 
-    const activityMap = aggregateTableData(p6Activities, dpQtyData, dpBlockData, dpVendorBlockData);
+    const activityMap = aggregateTableData(filteredP6, filteredQty, filteredBlock, filteredVendor);
     const grouped = groupActivitiesByCategory(activityMap);
     const { rows, categoryRowIndices } = buildTableData(grouped);
 
@@ -213,7 +212,7 @@ export const DPRSummarySection: React.FC<DPRSummarySectionProps> = ({
     });
 
     return { mainActivityData: rows, rowStyles: styles };
-  }, [p6Activities, dpQtyData, dpBlockData, dpVendorBlockData]);
+  }, [p6Activities, dpQtyData, dpBlockData, dpVendorBlockData, selectedBlock]);
 
   const [localResourceData, setLocalResourceData] = useState<any[]>([]);
 
@@ -270,7 +269,9 @@ export const DPRSummarySection: React.FC<DPRSummarySectionProps> = ({
           rowStyles={rowStyles}
           isReadOnly={true}
           hideAddRow={true}
-          onExportAll={onExportAll} totalRows={undefined} />
+          onExportAll={onExportAll} 
+          onReachEnd={onReachEnd}
+          totalRows={undefined} />
       )}
 
       {activeTable === 'charging' && (

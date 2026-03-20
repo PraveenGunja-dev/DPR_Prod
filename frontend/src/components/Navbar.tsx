@@ -1,4 +1,4 @@
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { Building2, User, LogOut, Users, FolderPlus, BarChart3, UserPlus, AlertCircle, Bell, Eye } from "lucide-react"
 import { Button } from "./ui/button"
 import { useNavigate } from "react-router-dom"
@@ -16,7 +16,7 @@ import {
 import { useEffect, useState } from "react"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { createPortal } from "react-dom"
-import { ChevronDown, ChevronRight, Circle } from "lucide-react"
+import { ChevronDown, ChevronRight, Circle, BellDot } from "lucide-react"
 import { IssuesViewModal } from "@/components/IssuesViewModal"
 
 interface NavbarProps {
@@ -163,8 +163,8 @@ export const Navbar = ({ userName, userRole, projectName, onAddUser, onAddProjec
   };
 
   // Use the user data from context if available, otherwise use props
-  const displayName = user?.Name || userName || "User"
-  const displayRole = user?.Role || userRole || "Role"
+  const displayName = user?.name || user?.Name || userName || "User"
+  const displayRole = user?.role || user?.Role || userRole || "Role"
 
   // Poll for issue stats for relevant roles
   useEffect(() => {
@@ -218,146 +218,157 @@ export const Navbar = ({ userName, userRole, projectName, onAddUser, onAddProjec
   const NotificationModal = () => {
     if (!isModalOpen) return null;
 
+    const getIcon = (type: string) => {
+      switch (type) {
+        case 'success': return <Circle className="w-3 h-3 fill-green-500 text-green-500" />;
+        case 'error': return <AlertCircle className="w-4 h-4 text-red-500" />;
+        case 'warning': return <AlertCircle className="w-4 h-4 text-orange-500" />;
+        default: return <Bell className="w-4 h-4 text-blue-500" />;
+      }
+    };
+
     return createPortal(
       <>
         {/* Backdrop */}
         <div
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/40 backdrop-blur-md z-[100] flex items-center justify-end"
           onClick={() => setIsModalOpen(false)}
         >
-          {/* Modal Container */}
-          <div
-            className="bg-background rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col border border-border"
-            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside modal
+          {/* Slide-in Panel (Modern Industry Standard) */}
+          <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 20, stiffness: 100 }}
+            className="bg-background border-l border-border w-full max-w-md h-full shadow-2xl flex flex-col pt-16 sm:pt-0"
+            onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
-              <h2 className="text-lg font-semibold">Notifications</h2>
-              <div className="flex items-center gap-2">
-                {unreadCount > 0 && (
-                  <Button variant="ghost" size="sm" onClick={(e) => {
-                    e.stopPropagation();
-                    markAllAsRead();
-                  }}>
-                    Mark all as read
-                  </Button>
-                )}
-                {/* Close Button */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full"
-                  onClick={() => setIsModalOpen(false)}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </Button>
+            <div className="flex items-center justify-between p-6 border-b border-border bg-muted/30">
+              <div>
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-primary" />
+                  Notifications
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {unreadCount > 0 ? `You have ${unreadCount} unread messages` : 'All caught up!'}
+                </p>
               </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full hover:bg-muted"
+                onClick={() => setIsModalOpen(false)}
+              >
+                <ChevronRight className="w-6 h-6" />
+              </Button>
             </div>
 
-            {/* Notifications List - Fixed height with scroll */}
-            <div className="overflow-y-auto flex-grow" style={{ maxHeight: 'calc(80vh - 80px)' }}>
+            <div className="flex items-center justify-between px-6 py-2 border-b border-border bg-background/50 text-xs">
+              <Button 
+                variant="link" 
+                size="sm" 
+                className="h-auto p-0 text-primary font-semibold"
+                onClick={markAllAsRead}
+              >
+                Mark all as read
+              </Button>
+              <span className="text-muted-foreground">Recent activity</span>
+            </div>
+
+            {/* Notifications List */}
+            <div className="overflow-y-auto flex-grow px-2 py-4 space-y-2">
               {notifications.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground">
-                  No notifications
+                <div className="flex flex-col items-center justify-center h-64 text-center space-y-4">
+                  <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center text-muted-foreground/30">
+                    <Bell className="w-8 h-8" />
+                  </div>
+                  <p className="text-muted-foreground">No notifications found.</p>
                 </div>
               ) : (
-                <div className="divide-y divide-border">
-                  {notifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={`p-4 ${!notification.read ? 'bg-muted/50' : ''}`}
-                    >
-                      {/* Notification Item Header */}
-                      <div
-                        className="flex items-start gap-3 cursor-pointer"
-                        onClick={() => toggleExpand(notification.id)}
-                      >
-                        {/* Read/Unread Indicator */}
-                        <div className="mt-1">
-                          {notification.read ? (
-                            <Circle className="w-2 h-2 fill-current text-muted" />
-                          ) : (
-                            <Circle className="w-2 h-2 fill-current text-blue-500" />
-                          )}
-                        </div>
-
-                        {/* Type Icon - using Bell as default, could be customized based on type */}
-                        <div className="mt-0.5">
-                          <Bell className="w-4 h-4 text-muted-foreground" />
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-grow">
-                          <div className="flex items-start justify-between">
-                            <div className="font-medium">{notification.title}</div>
-                            <div className="flex items-center gap-2">
-                              {/* Status Tag - simplified for now */}
-                              <span className="text-xs px-2 py-1 bg-muted rounded-full">
-                                {notification.type}
-                              </span>
-                              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                {new Date(notification.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-sm text-muted-foreground mt-1">
-                            {notification.message}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {new Date(notification.timestamp).toLocaleDateString()}
-                          </div>
-                        </div>
-
-                        {/* Expand/Collapse Arrow */}
-                        <div className="self-center">
-                          {expandedItems[notification.id] ? (
-                            <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="w-5 h-5 text-muted-foreground" />
-                          )}
-                        </div>
+                notifications.map((notification) => (
+                  <motion.div
+                    key={notification.id}
+                    layout
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`group relative p-4 rounded-xl border transition-all duration-200 cursor-pointer ${
+                      !notification.read 
+                        ? 'bg-primary/5 border-primary/20 shadow-sm' 
+                        : 'bg-card border-border hover:border-border/80 hover:bg-muted/30'
+                    }`}
+                    onClick={() => toggleExpand(notification.id)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="mt-1 flex-shrink-0">
+                        {getIcon(notification.type)}
                       </div>
-
-                      {/* Expanded Content */}
-                      {expandedItems[notification.id] && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="pl-10 pr-5 pt-3 pb-2 border-t border-border mt-3">
-                            <div className="font-medium mb-2">Remarks</div>
-                            <div className="text-sm mb-3">{notification.message}</div>
-                            <Button
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleNotificationClick(notification);
-                              }}
+                      
+                      <div className="flex-grow min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className={`text-sm font-semibold truncate ${!notification.read ? 'text-foreground' : 'text-muted-foreground'}`}>
+                            {notification.title}
+                          </h3>
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap tabular-nums">
+                            {new Date(notification.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        
+                        <p className={`text-xs mt-1 line-clamp-2 ${!notification.read ? 'text-muted-foreground' : 'text-muted-foreground/70'}`}>
+                          {notification.message}
+                        </p>
+                        
+                        {/* Expanded details */}
+                        <AnimatePresence>
+                          {expandedItems[notification.id] && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden"
                             >
-                              Go to DP IDT
-                            </Button>
-                          </div>
-                        </motion.div>
-                      )}
+                              <div className="pt-3 mt-3 border-t border-border/50">
+                                <p className="text-xs text-muted-foreground italic mb-3">
+                                  {new Date(notification.timestamp).toLocaleString()}
+                                </p>
+                                {notification.sheetType && (
+                                  <Button
+                                    size="sm"
+                                    className="w-full text-xs font-semibold h-8"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleNotificationClick(notification);
+                                    }}
+                                  >
+                                    View Related Sheet
+                                    <ChevronRight className="w-3 h-3 ml-2" />
+                                  </Button>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                    
+                    {!notification.read && (
+                      <div className="absolute top-4 right-2 w-2 h-2 rounded-full bg-primary" />
+                    )}
+                  </motion.div>
+                ))
               )}
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-border text-center text-sm text-muted-foreground flex-shrink-0">
-              {notifications.length > 0
-                ? `${notifications.length} notification${notifications.length !== 1 ? 's' : ''}`
-                : 'No notifications'}
+            <div className="p-6 border-t border-border bg-muted/20 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                Showing {notifications.length} recent alerts
+              </span>
+              <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={() => setIsModalOpen(false)}>
+                Close Panel
+              </Button>
             </div>
-          </div>
+          </motion.div>
         </div>
       </>,
       document.body

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { StyledExcelTable } from "@/components/StyledExcelTable";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,10 @@ interface ManpowerDetailsTableProps {
   onExportAll?: () => void;
   totalRows?: number;
   onFullscreenToggle?: (isFullscreen: boolean) => void;
+  onReachEnd?: () => void;
+  universalFilter?: string;
+  projectId?: number;
+  selectedBlock?: string;
 }
 
 export function ManpowerDetailsTable({
@@ -47,7 +51,11 @@ export function ManpowerDetailsTable({
   status = 'draft',
   onExportAll,
   totalRows,
-  onFullscreenToggle
+  onFullscreenToggle,
+  onReachEnd,
+  universalFilter,
+  projectId,
+  selectedBlock = "ALL"
 }: ManpowerDetailsTableProps) {
 
 
@@ -72,22 +80,30 @@ export function ManpowerDetailsTable({
     [today]: 70
   };
 
+  // Filter data based on selected block
+  const filteredData = useMemo(() => {
+    if (!Array.isArray(data)) return [];
+    if (selectedBlock === "ALL") return data;
+    return data.filter(d => d.block === selectedBlock);
+  }, [data, selectedBlock]);
+
   // Convert array of objects to array of arrays
-  const tableData = (Array.isArray(data) ? data : []).map(row => [
-    row.activityId,
-    row.block,
-    row.contractorName,
-    row.activity,
-    row.section,
-    row.yesterdayValue,
-    row.todayValue
-  ]);
+  const tableData = useMemo(() => {
+    return (Array.isArray(filteredData) ? filteredData : []).map(row => [
+      row.activityId,
+      row.block,
+      row.contractorName,
+      row.activity,
+      row.section,
+      row.yesterdayValue,
+      row.todayValue
+    ]);
+  }, [filteredData]);
 
   // Dynamically color cells based on approval status
-  const cellTextColors = React.useMemo(() => {
+  const cellTextColors = useMemo(() => {
     const colors: Record<number, Record<string, string>> = {};
-    const safeData = Array.isArray(data) ? data : [];
-    safeData.forEach((row, rowIndex) => {
+    filteredData.forEach((row, rowIndex) => {
       if (row.yesterdayIsApproved === false) {
         colors[rowIndex] = {
           [yesterday]: "#ce440d" // Darker orange
@@ -99,13 +115,13 @@ export function ManpowerDetailsTable({
       }
     });
     return colors;
-  }, [data, yesterday]);
+  }, [filteredData, yesterday]);
 
   // Handle data changes from ExcelTable
   const handleDataChange = (newData: any[][]) => {
-    // Convert array of arrays back to array of objects
-    const updatedData = newData.map((row, index) => ({
-      ...data[index],
+    const actualDataRows = newData.slice(0, filteredData.length);
+    const updatedRows = actualDataRows.map((row, index) => ({
+      ...filteredData[index],
       activityId: row[0] || "",
       slNo: "", // Keep for compatibility but not displayed
       block: row[1] || "",
@@ -115,10 +131,23 @@ export function ManpowerDetailsTable({
       yesterdayValue: row[5] || "",
       todayValue: row[6] || ""
     }));
-    setData(updatedData);
+
+    let nextData: ManpowerDetailsData[];
+    if (selectedBlock !== "ALL") {
+        const fullDataCopy = [...data];
+        updatedRows.forEach(updatedRow => {
+            const idx = fullDataCopy.findIndex(d => d.activityId === updatedRow.activityId);
+            if (idx !== -1) fullDataCopy[idx] = updatedRow;
+        });
+        nextData = fullDataCopy;
+    } else {
+        nextData = updatedRows;
+    }
+    
+    setData(nextData);
 
     // Recalculate total manpower
-    const total = updatedData.reduce((sum, row) => {
+    const total = nextData.reduce((sum, row) => {
       const todayValue = parseInt(row.todayValue) || 0;
       return sum + todayValue;
     }, 0);
@@ -158,6 +187,10 @@ export function ManpowerDetailsTable({
         status={status} // Pass status to StyledExcelTable
         onExportAll={onExportAll}
         onFullscreenToggle={onFullscreenToggle}
+        onReachEnd={onReachEnd}
+        externalGlobalFilter={universalFilter}
+        projectId={projectId}
+        sheetType="manpower_details"
       />
     </div>
   );

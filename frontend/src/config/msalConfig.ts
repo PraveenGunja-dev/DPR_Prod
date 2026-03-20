@@ -4,8 +4,8 @@ import { Configuration, LogLevel } from '@azure/msal-browser';
 
 export const msalConfig: Configuration = {
   auth: {
-    clientId: '743487f7-7ec0-4c3b-ba83-793370bb133f',
-    authority: 'https://login.microsoftonline.com/04c72f56-1848-46a2-8167-8e5d36510cbc',
+    clientId: import.meta.env.VITE_AZURE_CLIENT_ID || '',
+    authority: `https://login.microsoftonline.com/${import.meta.env.VITE_AZURE_TENANT_ID || ''}`,
     redirectUri: window.location.origin,
     postLogoutRedirectUri: window.location.origin,
     navigateToLoginRequestUrl: true,

@@ -10,8 +10,8 @@ import {
     unassignProjectFromSupervisor,
     getProjectSupervisors,
     getProjectSitePMs
-} from "@/modules/auth/services/projectService";
-import { getAllSupervisors, getAllSitePMs } from "@/modules/auth/services/authService";
+} from "@/services/projectService";
+import { getAllSupervisors, getAllSitePMs } from "@/services/userService";
 
 interface Project {
     ObjectId: number;

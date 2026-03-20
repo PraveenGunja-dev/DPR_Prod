@@ -1,0 +1,33 @@
+# FastAPI Core
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Database (psycopg3 with binary wheels - no C compiler needed)
+psycopg[binary]>=3.2.10
+psycopg-pool>=3.2.4
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# HTTP Client (for Oracle P6 API calls)
+httpx==0.28.1
+
+# Email
+aiosmtplib==3.0.2
+
+# Azure AD SSO
+msal==1.31.1
+
+# Environment / Config
+pydantic-settings==2.7.1
+python-dotenv==1.0.1
+
+# Caching
+cachetools==5.5.1
+
+# Background Jobs
+apscheduler==3.10.4
+
+# Static Files
+aiofiles==24.1.0

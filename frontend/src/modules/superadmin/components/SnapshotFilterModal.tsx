@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Download, RefreshCw, FileDown, Eye } from 'lucide-react';
-import { fetchSnapshotData, exportSnapshotToExcel, exportSnapshotToPDF } from '../services/sheetEntriesService';
+import { fetchSnapshotData, exportSnapshotToExcel, exportSnapshotToPDF } from '@/services/sheetEntriesService';
 import { toast } from 'sonner';
 
 interface SnapshotFilterModalProps {

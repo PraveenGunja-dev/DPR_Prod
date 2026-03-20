@@ -7,7 +7,7 @@ import {
   getDraftEntry,
   saveDraftEntry,
   submitEntry
-} from "@/modules/auth/services/dprSupervisorService";
+} from "@/services/dprService";
 import {
   Dialog,
   DialogContent,
@@ -54,6 +54,7 @@ interface MmsModuleRfiTableWithDynamicColumnsProps {
   isLocked?: boolean;
   status?: string;
   onExportAll?: () => void;
+  universalFilter?: string;
 }
 
 export function MmsModuleRfiTableWithDynamicColumns({
@@ -63,7 +64,8 @@ export function MmsModuleRfiTableWithDynamicColumns({
   today,
   isLocked = false,
   status = 'draft',
-  onExportAll
+  onExportAll,
+  universalFilter
 }: MmsModuleRfiTableWithDynamicColumnsProps) {
   const [dynamicColumns, setDynamicColumns] = useState<DynamicColumn[]>([]);
   const [entry, setEntry] = useState<any>(null);
@@ -340,7 +342,10 @@ export function MmsModuleRfiTableWithDynamicColumns({
           ]
         ]}
         status={entry?.status}
-        onExportAll={onExportAll} totalRows={undefined}      />
+        onExportAll={onExportAll} 
+        totalRows={undefined}      
+        externalGlobalFilter={universalFilter}
+      />
     </div>
   );
 }

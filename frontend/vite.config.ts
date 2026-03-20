@@ -6,11 +6,18 @@ import path from "path";
 export default defineConfig(({ mode }) => ({
   base: '/',
   server: {
-    host: "::",
+    host: "0.0.0.0", // Use IPv4 for better compatibility on VMs
     port: 8080,
     proxy: {
+      // Proxy all /api requests to the backend on port 3316
+      '/api': {
+        target: 'http://127.0.0.1:3316',
+        changeOrigin: true,
+        secure: false,
+      },
+      // Keep support for the subpath if needed
       '/dpr-project/api': {
-        target: 'http://localhost:3315',
+        target: 'http://127.0.0.1:3316',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/dpr-project\/api/, '/api'),
       },
@@ -22,5 +29,8 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+  }
 }));
-

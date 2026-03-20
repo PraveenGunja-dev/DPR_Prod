@@ -5,9 +5,11 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/modules/auth/contexts/AuthContext";
 import { useNotification } from "@/modules/auth/contexts/NotificationContext";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, FileSpreadsheet, Package, User, Save, Send, Plus, Grid3X3, Building, Wrench, RefreshCw } from "lucide-react";
-import { getAssignedProjects, getUserProjects } from "@/modules/auth/services/projectService";
-import { getDraftEntry, saveDraftEntry, submitEntry, getTodayAndYesterday } from "@/modules/auth/services/dprSupervisorService";
+import { Input } from "@/components/ui/input";
+import { AlertCircle, FileSpreadsheet, Package, User, Save, Send, Plus, Grid3X3, Building, Wrench, RefreshCw, CheckCircle2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { getAssignedProjects, getUserProjects } from "@/services/projectService";
+import { getDraftEntry, saveDraftEntry, submitEntry, getTodayAndYesterday } from "@/services/dprService";
 import {
   getP6ActivitiesForProject,
   getP6ActivitiesPaginated,
@@ -42,6 +44,14 @@ import {
   IssuesTable,
   DPRSummarySection
 } from "./components";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { ResourceTable } from "./components/ResourceTable";
 import { DashboardLayout } from "@/components/shared/DashboardLayout";
 
@@ -101,6 +111,7 @@ const SupervisorDashboard = () => {
 
   const [showEditReasonModal, setShowEditReasonModal] = useState(false);
   const [editReason, setEditReason] = useState("");
+  const [universalFilter, setUniversalFilter] = useState("CC");
   const [pendingSubmitAction, setPendingSubmitAction] = useState<(() => void) | null>(null);
 
   const currentProject = assignedProjects.find(p =>
@@ -114,7 +125,7 @@ const SupervisorDashboard = () => {
     // In projects page, it provides projectDetails.SheetTypes
     // From backend login, it might be project.SheetTypes
     // From local db map, it might be project.sheet_types
-    let permittedSheets = currentProject?.SheetTypes || currentProject?.sheet_types || [];
+    let permittedSheets = currentProject?.sheetTypes || currentProject?.SheetTypes || currentProject?.sheet_types || [];
 
     // Ensure it's an array (in case it comes through stringified somehow)
     if (typeof permittedSheets === 'string') {
@@ -148,6 +159,30 @@ const SupervisorDashboard = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [paginationInfo, setPaginationInfo] = useState<PaginationInfo | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  const [selectedBlock, setSelectedBlock] = useState<string>("ALL");
+
+  // Get unique blocks for filtering (from raw P6 data)
+  const uniqueBlocks = useMemo(() => {
+    const blocks = new Set<string>();
+    if (Array.isArray(p6Activities)) {
+      p6Activities.forEach(a => {
+        // Broaden search to include block, newBlockNom, and plot
+        const b = a.block || a.newBlockNom || a.plot;
+        if (b && typeof b === 'string') {
+          const normalized = b.trim().toUpperCase();
+          if (normalized) blocks.add(normalized);
+        }
+      });
+    }
+    const result = ["ALL", ...Array.from(blocks).sort()];
+    return result;
+  }, [p6Activities]);
+
+  // Reset filter when project changes
+  useEffect(() => {
+    setSelectedBlock("ALL");
+  }, [currentProjectId]);
 
 
 
@@ -190,6 +225,7 @@ const SupervisorDashboard = () => {
     activityId: string;
     activities: string;
     plot: string;
+    block?: string;
     newBlockNom: string;
     priority: string;
     baselinePriority: string;
@@ -220,6 +256,7 @@ const SupervisorDashboard = () => {
   interface DPBlockData {
     activityId: string;
     activities: string;
+    block: string;
     blockCapacity: string;
     phase: string;
     block: string;
@@ -267,6 +304,7 @@ const SupervisorDashboard = () => {
     activityId: string;
     activities: string;
     plot: string;
+    block?: string;
     newBlockNom: string;
     baselinePriority: string;
     scope: string;
@@ -444,7 +482,7 @@ const SupervisorDashboard = () => {
           case 'dp_qty':
             console.log('Merging draft edits onto P6 data for dp_qty. P6 rows:', dpQtyData.length);
             setDpQtyData(prev =>
-              mergeDraftWithP6Data(prev, data.rows, ['today', 'yesterday', 'remarks', 'cumulative', 'balance'])
+              mergeDraftWithP6Data(prev, data.rows, ['today', 'yesterday', 'remarks', 'cumulative', 'balance', 'weightage'])
             );
             break;
           case 'dp_vendor_block':
@@ -464,7 +502,7 @@ const SupervisorDashboard = () => {
           case 'dp_block':
             console.log('Merging draft edits onto P6 data for dp_block. P6 rows:', dpBlockData.length);
             setDpBlockData(prev =>
-              mergeDraftWithP6Data(prev, data.rows, ['actualStartDate', 'actualFinishDate', 'forecastStartDate', 'forecastFinishDate'])
+              mergeDraftWithP6Data(prev, data.rows, ['actualStartDate', 'actualFinishDate', 'forecastStartDate', 'forecastFinishDate', 'priority'])
             );
             break;
           case 'dp_vendor_idt':
@@ -1136,57 +1174,6 @@ const SupervisorDashboard = () => {
     }
   };
 
-  // Load More Trigger component for infinite scroll - auto-triggers when scrolled into view
-  const LoadMoreTrigger = () => {
-    const { ref, inView } = useInView({
-      threshold: 0,
-      rootMargin: '100px', // Trigger 100px before element comes into view
-    });
-
-    // Auto-load when trigger comes into view
-    useEffect(() => {
-      if (inView && paginationInfo?.hasMore && !loadingMore && !loadingActivities) {
-        loadMoreActivities();
-      }
-    }, [inView]);
-
-    if (!paginationInfo) {
-      return null;
-    }
-
-    // Show "All loaded" indicator when all data is loaded
-    if (!paginationInfo.hasMore && paginationInfo.totalCount > 0) {
-      return (
-        <div className="mt-4 p-3 text-center bg-green-50 border border-green-200 rounded-lg">
-          <span className="text-green-700 text-sm">
-            ✓ All {paginationInfo.totalCount} activities loaded
-          </span>
-        </div>
-      );
-    }
-
-    return (
-      <div
-        ref={ref}
-        className="mt-4 p-3 text-center bg-blue-50 border border-blue-200 rounded-lg"
-      >
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <span className="text-blue-700 text-sm">
-            Showing {p6Activities.length} of {paginationInfo.totalCount} activities
-          </span>
-          {loadingMore ? (
-            <div className="flex items-center text-blue-600">
-              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-              <span className="text-sm">Loading more...</span>
-            </div>
-          ) : (
-            <span className="text-blue-500 text-sm">↓ Scroll to load more</span>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   // Render table components based on active tab
   const renderActiveTable = () => {
     // Determine the status based on currentDraftEntry
@@ -1199,16 +1186,17 @@ const SupervisorDashboard = () => {
     switch (activeTab) {
       case 'summary':
         return (
-          <DPRSummarySection
-            p6Activities={p6Activities}
-            dpQtyData={dpQtyData}
-            dpBlockData={dpBlockData}
-            dpVendorBlockData={dpVendorBlockData}
-            dpVendorIdtData={dpVendorIdtData}
-            manpowerDetailsData={manpowerDetailsData}
-            resourceData={resourceData}
-            onExportAll={handleExportAllSheets}
-          />
+            <DPRSummarySection
+              p6Activities={p6Activities}
+              dpQtyData={dpQtyData}
+              dpBlockData={dpBlockData}
+              dpVendorBlockData={dpVendorBlockData}
+              dpVendorIdtData={dpVendorIdtData}
+              manpowerDetailsData={manpowerDetailsData}
+              resourceData={resourceData}
+              onExportAll={handleExportAllSheets}
+              selectedBlock={selectedBlock}
+            />
         );
       case 'dp_qty':
         return (
@@ -1237,8 +1225,10 @@ const SupervisorDashboard = () => {
 
               onExportAll={handleExportAllSheets}
               totalRows={paginationInfo?.totalCount || p6Activities.length}
+              universalFilter={universalFilter}
+              projectId={currentProjectId}
+              selectedBlock={selectedBlock}
             />
-            <LoadMoreTrigger />
           </>
         );
       case 'dp_vendor_block':
@@ -1269,8 +1259,10 @@ const SupervisorDashboard = () => {
               projectName={projectName}
               onExportAll={handleExportAllSheets}
               totalRows={paginationInfo?.totalCount || p6Activities.length}
+              universalFilter={universalFilter}
+              projectId={currentProjectId}
+              selectedBlock={selectedBlock}
             />
-            <LoadMoreTrigger />
           </>
         );
       case 'manpower_details':
@@ -1302,8 +1294,10 @@ const SupervisorDashboard = () => {
 
               onExportAll={handleExportAllSheets}
               totalRows={paginationInfo?.totalCount || p6Activities.length}
+              universalFilter={universalFilter}
+              projectId={currentProjectId}
+              selectedBlock={selectedBlock}
             />
-            <LoadMoreTrigger />
           </>
         );
       case 'dp_block':
@@ -1333,8 +1327,10 @@ const SupervisorDashboard = () => {
 
               onExportAll={handleExportAllSheets}
               totalRows={paginationInfo?.totalCount || p6Activities.length}
+              universalFilter={universalFilter}
+              projectId={currentProjectId}
+              selectedBlock={selectedBlock}
             />
-            <LoadMoreTrigger />
           </>
         );
       case 'dp_vendor_idt':
@@ -1364,8 +1360,10 @@ const SupervisorDashboard = () => {
 
               onExportAll={handleExportAllSheets}
               totalRows={paginationInfo?.totalCount || p6Activities.length}
+              universalFilter={universalFilter}
+              projectId={currentProjectId}
+              selectedBlock={selectedBlock}
             />
-            <LoadMoreTrigger />
           </>
         );
       case 'mms_module_rfi':
@@ -1437,6 +1435,7 @@ const SupervisorDashboard = () => {
                 isLocked={isEntryReadOnly}
                 status={entryStatus}
                 onExportAll={handleExportAllSheets}
+                selectedBlock={selectedBlock}
               />
             ) : (
               /* Fallback to the original component */
@@ -1451,6 +1450,8 @@ const SupervisorDashboard = () => {
                 status={entryStatus}
 
                 onExportAll={handleExportAllSheets}
+                universalFilter={universalFilter}
+                selectedBlock={selectedBlock}
               />
             )}
           </>
@@ -1475,6 +1476,7 @@ const SupervisorDashboard = () => {
             isLocked={isEntryReadOnly}
             status={entryStatus}
             onExportAll={handleExportAllSheets}
+            universalFilter={universalFilter}
           />
         );
       case 'issues':
@@ -1514,18 +1516,18 @@ const SupervisorDashboard = () => {
         >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Daily Progress Report</h1>
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-1">Daily Progress Report</h1>
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1">
                 <p className="text-xs sm:text-sm text-muted-foreground">{projectName}</p>
                 {user?.Role === 'supervisor' && (
                   <div className="flex flex-wrap items-center gap-1 sm:gap-2">
                     <div className="flex flex-wrap gap-1 border-r border-border pr-2 sm:pr-4">
-                      {(!currentProject?.SheetTypes || currentProject.SheetTypes.length === 0) ? (
+                      {(!currentProject?.sheetTypes || currentProject.sheetTypes.length === 0) ? (
                         <span className="px-2 py-0.5 text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 rounded-full border border-emerald-200 dark:border-emerald-800 font-medium">
                           All Sheets Access
                         </span>
                       ) : (
-                        currentProject.SheetTypes.map((sheet: string, idx: number) => (
+                        currentProject.sheetTypes.map((sheet: string, idx: number) => (
                           <span key={idx} className="px-2 py-0.5 text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-full border border-blue-200 dark:border-blue-800 font-medium">
                             {formatSheetType(sheet)}
                           </span>
@@ -1549,7 +1551,32 @@ const SupervisorDashboard = () => {
                 )}
               </div>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 sm:space-x-3 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+              <div className="flex items-center shrink-0">
+                <span className="text-sm font-medium mr-2 whitespace-nowrap hidden lg:block">Activity Filter:</span>
+                <Input 
+                    placeholder="e.g. MS, LD, SC..."
+                    value={universalFilter}
+                    onChange={e => setUniversalFilter(e.target.value)}
+                    className="h-9 w-[120px] md:w-[150px]"
+                />
+              </div>
+
+              <div className="flex items-center shrink-0">
+                <span className="text-sm font-medium mr-2 whitespace-nowrap hidden lg:block">Block:</span>
+                <Select value={selectedBlock} onValueChange={setSelectedBlock}>
+                  <SelectTrigger className="h-9 w-[120px] md:w-[150px] bg-background">
+                    <SelectValue placeholder="All Blocks" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueBlocks.map(block => (
+                      <SelectItem key={block} value={block}>
+                        {block === "ALL" ? "All Blocks" : block}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <Button
                 variant="outline"
                 size="sm"
@@ -1571,6 +1598,32 @@ const SupervisorDashboard = () => {
               </Button>
             </div>
           </div>
+          
+          {/* Progress Bar for Activity Fetching */}
+          {(loadingActivities || loadingMore) && (
+            <div className="mt-3">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                  {loadingActivities ? 'Loading activities...' : 'Fetching more...'}
+                </span>
+                <span className="text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                  {paginationInfo ? `${Math.round((p6Activities.length / (paginationInfo.totalCount || 1)) * 100)}%` : '...'}
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                <motion.div 
+                  className="bg-blue-600 h-full"
+                  initial={{ width: 0 }}
+                  animate={{ 
+                    width: paginationInfo 
+                      ? `${Math.min(100, (p6Activities.length / (paginationInfo.totalCount || 1)) * 100)}%` 
+                      : '30%' 
+                  }}
+                  transition={{ duration: 0.5 }}
+                />
+              </div>
+            </div>
+          )}
         </motion.div>
 
         <motion.div

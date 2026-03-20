@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { BarChart3 } from 'lucide-react';
 import { ChartsSection } from './ChartsSection';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getAssignedProjects } from '@/modules/auth/services/projectService';
+import { getAssignedProjects } from '@/services/projectService';
 
 export const ChartsPage: React.FC = () => {
   const { user } = useAuth();

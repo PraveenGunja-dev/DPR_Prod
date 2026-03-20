@@ -10,6 +10,7 @@ interface Project {
   startDate?: string;
   endDate?: string;
   sheetTypes?: string[];
+  originalProject?: any;
 }
 
 interface ProjectListingProps {
@@ -61,22 +62,22 @@ export const ProjectListing: React.FC<ProjectListingProps> = ({ projects, onProj
         {projects.map((project, index) => (
           <Card
             key={index}
-            className="rounded-xl border border-border bg-card text-card-foreground shadow-sm hover:shadow-md transition-all duration-300 p-3 cursor-pointer hover:border-primary"
+            className="rounded-xl border border-border bg-card text-card-foreground shadow-sm hover:shadow-lg transition-all duration-300 p-4 cursor-pointer hover:border-primary/50 group"
             onClick={() => onProjectClick && onProjectClick(project)}
           >
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-4 sm:gap-6">
               {/* Logo */}
-              <div className="flex-shrink-0 w-12 sm:w-18 h-8 sm:h-10 flex items-center justify-center rounded-lg">
+              <div className="flex-shrink-0 w-20 sm:w-32 h-10 sm:h-12 flex items-center justify-center rounded-lg bg-white/50 dark:bg-white/5 border border-border/50 p-2">
                 <img
                   src={`${import.meta.env.BASE_URL}logo.png`}
                   alt="Logo"
-                  className="h-6 sm:h-8 w-auto"
+                  className="h-8 sm:h-10 w-auto object-contain"
                 />
               </div>
 
               {/* Project name and location - takes remaining space */}
               <div className="flex-1 min-w-0">
-                <h3 className="text-sm sm:text-base font-semibold text-foreground truncate" title={project.name}>
+                <h3 className="text-base sm:text-lg font-bold text-foreground truncate group-hover:text-primary transition-colors" title={project.name}>
                   {project.name}
                 </h3>
                 {project.location && (

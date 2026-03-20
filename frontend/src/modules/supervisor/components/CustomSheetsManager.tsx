@@ -22,7 +22,7 @@ import {
   getCustomSheetDraftEntry,
   saveCustomSheetDraftEntry,
   submitCustomSheetEntry
-} from '@/modules/auth/services/customSheetsService';
+} from '@/services/customSheetsService';
 
 interface CustomSheet {
   id: number;

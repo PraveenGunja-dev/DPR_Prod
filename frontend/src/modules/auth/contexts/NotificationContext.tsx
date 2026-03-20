@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import apiClient from '@/services/apiClient';
+import { useAuth } from './AuthContext';
 
 export interface Notification {
   id: string;
@@ -26,6 +28,7 @@ interface NotificationContextType {
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
 export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { token, user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>(() => {
     const savedNotifications = localStorage.getItem('notifications');
     if (savedNotifications) {
@@ -59,12 +62,41 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
   const recentNotifications = getRecentNotifications();
   const unreadCount = recentNotifications.filter(notification => !notification.read).length;
 
-  // Save notifications to localStorage whenever they change
+  // Fetch notifications from backend
+  const fetchNotifications = useCallback(async () => {
+    if (!token) return;
+    try {
+      const response = await apiClient.get('/notifications/');
+      const backendNotifications = response.data.map((n: any) => ({
+        ...n,
+        id: String(n.id),
+        timestamp: new Date(n.timestamp || n.created_at)
+      }));
+      setNotifications(backendNotifications);
+    } catch (e) {
+      console.error('Failed to fetch notifications:', e);
+    }
+  }, [token]);
+
+  // Initial fetch and polling
   useEffect(() => {
-    localStorage.setItem('notifications', JSON.stringify(notifications));
+    if (token) {
+      fetchNotifications();
+      const interval = setInterval(fetchNotifications, 30000); // Poll every 30 seconds
+      return () => clearInterval(interval);
+    }
+  }, [token, fetchNotifications]);
+
+  // Save notifications to localStorage as backup/cache
+  useEffect(() => {
+    if (notifications.length > 0) {
+      localStorage.setItem('notifications', JSON.stringify(notifications));
+    }
   }, [notifications]);
 
-  const addNotification = (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
+  const addNotification = async (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
+    // In a real app, this might be triggered by server-side events,
+    // but we can still have a local helper if needed.
     const newNotification: Notification = {
       id: Math.random().toString(36).substr(2, 9),
       timestamp: new Date(),
@@ -75,22 +107,43 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     setNotifications(prev => [newNotification, ...prev]);
   };
 
-  const markAsRead = (id: string) => {
-    setNotifications(prev => 
-      prev.map(notification => 
-        notification.id === id ? { ...notification, read: true } : notification
-      )
-    );
+  const markAsRead = async (id: string) => {
+    try {
+      if (token) {
+        await apiClient.post(`/notifications/${id}/read`);
+      }
+      setNotifications(prev => 
+        prev.map(notification => 
+          notification.id === id ? { ...notification, read: true } : notification
+        )
+      );
+    } catch (e) {
+      console.error('Failed to mark notification as read:', e);
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => 
-      prev.map(notification => ({ ...notification, read: true }))
-    );
+  const markAllAsRead = async () => {
+    try {
+      if (token) {
+        await apiClient.post('/notifications/read-all');
+      }
+      setNotifications(prev => 
+        prev.map(notification => ({ ...notification, read: true }))
+      );
+    } catch (e) {
+      console.error('Failed to mark all notifications as read:', e);
+    }
   };
 
-  const clearNotifications = () => {
-    setNotifications([]);
+  const clearNotifications = async () => {
+    try {
+      if (token) {
+        await apiClient.delete('/notifications/clear');
+      }
+      setNotifications([]);
+    } catch (e) {
+      console.error('Failed to clear notifications:', e);
+    }
   };
 
   return (

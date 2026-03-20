@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Search, RefreshCw, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
-import { fetchAllEntries } from '../services/sheetEntriesService';
+import { fetchAllEntries } from '@/services/sheetEntriesService';
 import { toast } from 'sonner';
 
 interface SuperAdminSheetEntriesProps {

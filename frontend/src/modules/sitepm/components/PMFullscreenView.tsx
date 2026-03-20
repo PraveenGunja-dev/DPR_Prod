@@ -9,7 +9,7 @@ import {
   DPVendorIdtTable,
   MmsModuleRfiTable
 } from "@/modules/supervisor/components";
-import { getTodayAndYesterday } from "@/modules/auth/services/dprSupervisorService";
+import { getTodayAndYesterday } from "@/services/dprService";
 
 interface PMFullscreenViewProps {
   isFullscreen: boolean;
