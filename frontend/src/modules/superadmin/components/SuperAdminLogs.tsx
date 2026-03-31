@@ -144,10 +144,10 @@ export const SuperAdminLogs: React.FC<SuperAdminLogsProps> = ({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {systemLogs.length === 0 ? (
+                {!Array.isArray(systemLogs) || systemLogs.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center text-gray-500 py-8">
-                      No logs found
+                      {!Array.isArray(systemLogs) ? 'Invalid data received from server' : 'No logs found'}
                     </TableCell>
                   </TableRow>
                 ) : (

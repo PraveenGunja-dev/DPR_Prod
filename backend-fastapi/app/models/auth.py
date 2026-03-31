@@ -10,6 +10,8 @@ class LoginRequest(BaseModel):
     password: str
 
 
+from pydantic import BaseModel, Field, ConfigDict
+
 class RegisterRequest(BaseModel):
     name: str
     email: str

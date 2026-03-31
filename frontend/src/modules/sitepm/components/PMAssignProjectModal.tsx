@@ -36,6 +36,7 @@ export const PMAssignProjectModal: React.FC<PMAssignProjectModalProps> = ({
   });
   const [projectSearchTerm, setProjectSearchTerm] = useState('');
   const [supervisorSearchTerm, setSupervisorSearchTerm] = useState('');
+  const [projectYearFilter, setProjectYearFilter] = useState('ALL');
 
   // Handle assign form change
   const handleAssignFormChange = (field: string, value: string | string[]) => {
@@ -116,7 +117,40 @@ export const PMAssignProjectModal: React.FC<PMAssignProjectModalProps> = ({
     // Reset search terms
     setProjectSearchTerm('');
     setSupervisorSearchTerm('');
+    setProjectYearFilter('ALL');
   };
+
+  // Extract FY year or fallback to date (April-March FY)
+  const extractFY = (project: any): string => {
+    const p6Id = project.P6Id || project.p6Id || project.Id || '';
+    if (p6Id) {
+      const match = p6Id.match(/FY\d{2}/i);
+      if (match) return match[0].toUpperCase();
+    }
+    
+    // Fallback to date
+    const startDate = project.PlannedStartDate || project.PlanStart || project.planStart || project.StartDate;
+    if (startDate && startDate !== 'N/A') {
+      const date = new Date(startDate);
+      if (!isNaN(date.getTime())) {
+        const year = date.getFullYear();
+        const month = date.getMonth(); // 0 is January
+        const fyYear = month >= 3 ? year + 1 : year; // FY N is Apr Y to Mar Y+1
+        return `FY${String(fyYear).slice(-2)}`;
+      }
+    }
+    return '';
+  };
+
+  // Compute available years
+  const availableYears = React.useMemo(() => {
+    const years = new Set<string>();
+    projects.forEach(p => {
+      const fy = extractFY(p);
+      if (fy) years.add(fy);
+    });
+    return Array.from(years).sort();
+  }, [projects]);
 
   const handleAssignSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -161,23 +195,36 @@ export const PMAssignProjectModal: React.FC<PMAssignProjectModalProps> = ({
         <form onSubmit={handleAssignSubmit} className="space-y-4">
           <div>
             <Label>Projects</Label>
-            {/* Search input for projects */}
-            <div className="mb-2">
+            {/* Search and Year filter for projects */}
+            <div className="flex gap-2 mb-2">
               <Input
                 type="text"
                 placeholder="Search projects..."
                 value={projectSearchTerm}
                 onChange={(e) => setProjectSearchTerm(e.target.value)}
-                className="mb-2"
+                className="flex-1"
               />
+              <select 
+                className="w-[100px] border border-border rounded-md px-2 py-1 text-sm bg-background"
+                value={projectYearFilter}
+                onChange={(e) => setProjectYearFilter(e.target.value)}
+              >
+                <option value="ALL">All FY</option>
+                {availableYears.map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
             </div>
             <div className="border border-border rounded-md max-h-40 overflow-y-auto overflow-x-hidden">
               {projects.length > 0 ? (
                 // Filter projects based on search term
                 projects
-                  .filter(project =>
-                    project.Name.toLowerCase().includes(projectSearchTerm.toLowerCase())
-                  )
+                  .filter(project => {
+                    const matchesSearch = project.Name.toLowerCase().includes(projectSearchTerm.toLowerCase());
+                    const fy = extractFY(project);
+                    const matchesYear = projectYearFilter === 'ALL' || fy === projectYearFilter;
+                    return matchesSearch && matchesYear;
+                  })
                   .map((project) => {
                     const value = (project.ObjectId || project.id || '').toString();
 

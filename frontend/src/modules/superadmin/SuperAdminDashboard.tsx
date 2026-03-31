@@ -44,6 +44,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/modules/auth/contexts/AuthContext';
+import { useFilter } from '@/modules/auth/contexts/FilterContext';
 import axios from 'axios';
 import {
   SuperAdminHeader,
@@ -120,12 +121,12 @@ const SuperAdminDashboard = () => {
   const { user, token } = useAuth();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(location.state?.activeTab || 'users');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showSnapshotFilter, setShowSnapshotFilter] = useState(false);
+  const { searchTerm, setSearchTerm, yearFilter: projectYearFilter, setYearFilter: setProjectYearFilter, typeFilter: projectTypeFilter, setTypeFilter: setProjectTypeFilter } = useFilter();
   const [usersData, setUsersData] = useState<User[]>([]);
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [projectStatusFilter, setProjectStatusFilter] = useState('all');
+  const [showSnapshotFilter, setShowSnapshotFilter] = useState(false);
   const [projectsData, setProjectsData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -136,6 +137,37 @@ const SuperAdminDashboard = () => {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     }
   }, [token]);
+
+  // Extract FY year from P6Id or fallback to StartDate (April-March FY)
+  const extractFY = (project: any): string => {
+    const p6Id = project.P6Id || project.p6Id || project.Id || '';
+    if (p6Id) {
+      const match = p6Id.match(/FY\d{2}/i);
+      if (match) return match[0].toUpperCase();
+    }
+    
+    const startDate = project.PlannedStartDate || project.PlanStart || project.planStart || project.StartDate;
+    if (startDate && startDate !== 'N/A') {
+      const date = new Date(startDate);
+      if (!isNaN(date.getTime())) {
+        const year = date.getFullYear();
+        const month = date.getMonth(); // 0 is January
+        const fyYear = month >= 3 ? year + 1 : year;
+        return `FY${String(fyYear).slice(-2)}`;
+      }
+    }
+    return '';
+  };
+
+  // Compute unique available years from all projects
+  const availableYears = React.useMemo(() => {
+    const years = new Set<string>();
+    projectsData.forEach(p => {
+      const fy = extractFY(p);
+      if (fy) years.add(fy);
+    });
+    return Array.from(years).sort();
+  }, [projectsData]);
 
   // Fetch users data
   const fetchUsers = async () => {
@@ -252,7 +284,8 @@ const SuperAdminDashboard = () => {
     status: '',
     progress: 0,
     planStart: '',
-    planEnd: ''
+    planEnd: '',
+    projectType: 'solar'
   });
 
   // State for create project form
@@ -304,7 +337,7 @@ const SuperAdminDashboard = () => {
     setLogsLoading(true);
     setLogsError('');
     try {
-      let url = '/super-admin/logs';
+      let url = '/super-admin/system-logs';
       const params = new URLSearchParams();
 
       // Add action type filter if not 'all'
@@ -666,7 +699,7 @@ const SuperAdminDashboard = () => {
     setError('');
 
     try {
-      const response = await api.put(`/api/super-admin/users/${userId}`, data);
+      const response = await api.put(`/super-admin/users/${userId}`, data);
       console.log('User updated successfully:', response.data);
 
       setShowEditUserModal(false);
@@ -703,7 +736,7 @@ const SuperAdminDashboard = () => {
 
     try {
       const [projectsResponse, allProjectsResponse] = await Promise.all([
-        api.get(`/api/super-admin/users/${userId}/projects`),
+        api.get(`/super-admin/users/${userId}/projects`),
         api.get('/super-admin/projects')
       ]);
 
@@ -766,8 +799,8 @@ const SuperAdminDashboard = () => {
 
     try {
       const [userResponse, projectsResponse] = await Promise.all([
-        api.get(`/api/super-admin/users/${userId}`),
-        api.get(`/api/super-admin/users/${userId}/projects`)
+        api.get(`/super-admin/users/${userId}`),
+        api.get(`/super-admin/users/${userId}/projects`)
       ]);
 
       const userData = userResponse.data;
@@ -1125,7 +1158,7 @@ const SuperAdminDashboard = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {usersData
+                        {Array.isArray(usersData) && usersData
                           .filter((user) => {
                             // Apply search filter
                             if (searchTerm) {
@@ -1182,7 +1215,6 @@ const SuperAdminDashboard = () => {
                                       handleViewUser(user.ObjectId);
                                     }}
                                     title="View User"
-                                    className="hover:bg-gray-100 "
                                   >
                                     <Eye className="w-4 h-4 hover:text-blue-500" />
                                   </Button>
@@ -1194,7 +1226,6 @@ const SuperAdminDashboard = () => {
                                       handleEditUser(user.ObjectId);
                                     }}
                                     title="Edit User"
-                                    className="hover:bg-gray-100"
                                   >
                                     <Edit className="w-4 h-4" />
                                   </Button>
@@ -1206,7 +1237,6 @@ const SuperAdminDashboard = () => {
                                       handleAssignProject(user.ObjectId);
                                     }}
                                     title="Assign Project"
-                                    className="hover:bg-gray-100"
                                   >
                                     <FolderPlus className="w-4 h-4" />
                                   </Button>
@@ -1221,6 +1251,7 @@ const SuperAdminDashboard = () => {
               </CardContent>
             </Card>
           </TabsContent>
+          
 
           {/* Projects Tab */}
           <TabsContent value="projects" className="mt-6">
@@ -1250,6 +1281,29 @@ const SuperAdminDashboard = () => {
                         <SelectItem value="active">Active</SelectItem>
                         <SelectItem value="planning">Planning</SelectItem>
                         <SelectItem value="completed">Completed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={projectTypeFilter} onValueChange={setProjectTypeFilter}>
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Filter Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL">All Types</SelectItem>
+                        <SelectItem value="solar">Solar</SelectItem>
+                        <SelectItem value="wind">Wind</SelectItem>
+                        <SelectItem value="pss">PSS</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={projectYearFilter} onValueChange={setProjectYearFilter}>
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Filter Year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL">All Years</SelectItem>
+                        {availableYears.map(year => (
+                          <SelectItem key={year} value={year}>{year}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <Button
@@ -1282,7 +1336,9 @@ const SuperAdminDashboard = () => {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead>Project ID</TableHead>
                           <TableHead>Project Name</TableHead>
+                          <TableHead>Type</TableHead>
                           <TableHead>Location</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Progress</TableHead>
@@ -1292,7 +1348,7 @@ const SuperAdminDashboard = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {projectsData
+                        {Array.isArray(projectsData) && projectsData
                           .filter((project) => {
                             // Apply search filter
                             if (searchTerm) {
@@ -1310,11 +1366,24 @@ const SuperAdminDashboard = () => {
                               return false;
                             }
 
+                            // Apply type filter
+                            if (projectTypeFilter !== 'ALL' && (project.ProjectType?.toLowerCase() || 'solar') !== projectTypeFilter.toLowerCase()) {
+                              return false;
+                            }
+
+                            // Apply year filter
+                            const fy = extractFY(project);
+                            if (projectYearFilter !== 'ALL' && fy !== projectYearFilter) {
+                              return false;
+                            }
+
                             return true;
                           })
                           .map((project) => (
                             <TableRow key={project.ObjectId}>
+                              <TableCell className="font-mono text-xs text-muted-foreground">{project.ObjectId}</TableCell>
                               <TableCell className="font-medium">{project.Name}</TableCell>
+                              <TableCell className="capitalize">{project.ProjectType || 'Solar'}</TableCell>
                               <TableCell>{project.Location || 'N/A'}</TableCell>
                               <TableCell>
                                 <Badge variant={
@@ -1351,7 +1420,8 @@ const SuperAdminDashboard = () => {
                                         status: project.Status || 'planning',
                                         progress: project.Progress || 0,
                                         planStart: project.PlanStart ? new Date(project.PlanStart).toISOString().split('T')[0] : '',
-                                        planEnd: project.PlanEnd ? new Date(project.PlanEnd).toISOString().split('T')[0] : ''
+                                        planEnd: project.PlanEnd ? new Date(project.PlanEnd).toISOString().split('T')[0] : '',
+                                        projectType: project.ProjectType || 'solar'
                                       });
                                       setShowEditProjectModal(true);
                                     }}
@@ -1395,7 +1465,7 @@ const SuperAdminDashboard = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {rolesData.map((role: any) => (
+                      {Array.isArray(rolesData) && rolesData.map((role: any) => (
                         <TableRow key={role.id}>
                           <TableCell className="font-medium">{role.name}</TableCell>
                           <TableCell>{role.permissions}</TableCell>
@@ -1439,7 +1509,7 @@ const SuperAdminDashboard = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {workflowOverrides.map((override: any) => (
+                      {Array.isArray(workflowOverrides) && workflowOverrides.map((override: any) => (
                         <TableRow key={override.id}>
                           <TableCell className="font-medium">{override.sheetId}</TableCell>
                           <TableCell>{override.projectName}</TableCell>
@@ -1517,13 +1587,14 @@ const SuperAdminDashboard = () => {
           setLoading(true);
           setError('');
           try {
-            await api.put(`/api/super-admin/projects/${projectId}`, {
+            await api.put(`/super-admin/projects/${projectId}`, {
               name: data.name,
               location: data.location,
               status: data.status,
               progress: data.progress,
               planStart: data.planStart || null,
-              planEnd: data.planEnd || null
+              planEnd: data.planEnd || null,
+              projectType: data.projectType
             });
             setShowEditProjectModal(false);
             setSelectedProject(null);

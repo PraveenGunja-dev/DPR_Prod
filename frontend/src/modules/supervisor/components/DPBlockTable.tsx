@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { StyledExcelTable } from "@/components/StyledExcelTable";
 import { StatusChip } from "@/components/StatusChip";
+import { indianDateFormat } from "@/services/dprService";
 
 interface DPBlockData {
   // Identification
@@ -24,6 +25,12 @@ interface DPBlockData {
   // Date fields
   baselineStartDate: string;
   baselineEndDate: string;
+  bl1Start?: string;
+  bl1Finish?: string;
+  bl2Start?: string;
+  bl2Finish?: string;
+  bl3Start?: string;
+  bl3Finish?: string;
   actualStartDate: string;
   actualFinishDate: string;
   forecastStartDate: string;
@@ -57,18 +64,25 @@ export function DPBlockTable({ data, setData, onSave, onSubmit, yesterday, today
   const columns = [
     "Activity ID",
     "Activity",
+    "UOM",
     "Block Capacity (MWac)",
     "Phase",
     "Block",
     "SPV Number",
     "Priority",
-    "Scope",
+    "Total Quantity",
     "Hold",
     "Front",
     "Completed",
     "Balance",
     "Baseline Start",
     "Baseline End",
+    "Baseline 1 Start",
+    "Baseline 1 Finish",
+    "Baseline 2 Start",
+    "Baseline 2 Finish",
+    "Baseline 3 Start",
+    "Baseline 3 Finish",
     "Actual Start",
     "Actual Finish",
     "Forecast Start",
@@ -79,18 +93,25 @@ export function DPBlockTable({ data, setData, onSave, onSubmit, yesterday, today
   const columnWidths = {
     "Activity ID": 80,
     "Activity": 150,
+    "UOM": 60,
     "Block Capacity (MWac)": 100,
     "Phase": 70,
     "Block": 70,
     "SPV Number": 80,
     "Priority": 70,
-    "Scope": 70,
+    "Total Quantity": 100,
     "Hold": 60,
     "Front": 60,
     "Completed": 80,
     "Balance": 70,
     "Baseline Start": 90,
     "Baseline End": 90,
+    "Baseline 1 Start": 90,
+    "Baseline 1 Finish": 90,
+    "Baseline 2 Start": 90,
+    "Baseline 2 Finish": 90,
+    "Baseline 3 Start": 90,
+    "Baseline 3 Finish": 90,
     "Actual Start": 90,
     "Actual Finish": 90,
     "Forecast Start": 90,
@@ -99,19 +120,22 @@ export function DPBlockTable({ data, setData, onSave, onSubmit, yesterday, today
 
   // Define which columns are editable by the user
   const editableColumns = [
+    "UOM",
     "Phase",
     "Priority",
     "Hold",
     "Front",
     "Actual Start",
-    "Actual Finish"
+    "Actual Finish",
+    "Forecast Start",
+    "Forecast Finish"
   ];
 
   // Filter data based on selected block
   const filteredData = useMemo(() => {
     if (!Array.isArray(data)) return [];
-    if (selectedBlock === "ALL") return data;
-    return data.filter(d => d.block === selectedBlock);
+    const result = selectedBlock === "ALL" ? data : data.filter(d => d.block === selectedBlock);
+    return [...result].sort((a, b) => (String(a.activityId || "")).localeCompare(String(b.activityId || "")));
   }, [data, selectedBlock]);
 
   // Convert array of objects to array of arrays
@@ -119,6 +143,7 @@ export function DPBlockTable({ data, setData, onSave, onSubmit, yesterday, today
     return (Array.isArray(filteredData) ? filteredData : []).map(row => [
       row.activityId || '',
       row.activities || '',
+      row.uom || '',
       row.blockCapacity || '',
       row.phase || '',
       row.block || '',
@@ -129,12 +154,18 @@ export function DPBlockTable({ data, setData, onSave, onSubmit, yesterday, today
       row.front || '',
       row.completed || '',
       row.balance || '',
-      row.baselineStartDate || '',
-      row.baselineEndDate || '',
-      row.actualStartDate || '',
-      row.actualFinishDate || '',
-      row.forecastStartDate || '',
-      row.forecastFinishDate || ''
+      indianDateFormat(row.baselineStartDate) || '',
+      indianDateFormat(row.baselineEndDate) || '',
+      indianDateFormat(row.bl1Start) || '',
+      indianDateFormat(row.bl1Finish) || '',
+      indianDateFormat(row.bl2Start) || '',
+      indianDateFormat(row.bl2Finish) || '',
+      indianDateFormat(row.bl3Start) || '',
+      indianDateFormat(row.bl3Finish) || '',
+      indianDateFormat(row.actualStartDate) || '',
+      indianDateFormat(row.actualFinishDate) || '',
+      indianDateFormat(row.forecastStartDate) || '',
+      indianDateFormat(row.forecastFinishDate) || ''
     ]);
   }, [filteredData]);
 
@@ -145,29 +176,36 @@ export function DPBlockTable({ data, setData, onSave, onSubmit, yesterday, today
       ...filteredData[index],
       activityId: row[0] || '',
       activities: row[1] || '',
-      blockCapacity: row[2] || '',
-      phase: row[3] || '',
-      block: row[4] || '',
-      spvNumber: row[5] || '',
-      priority: row[6] || '',
-      scope: row[7] || '',
-      hold: row[8] || '',
-      front: row[9] || '',
-      completed: row[10] || '',
-      balance: row[11] || '',
-      baselineStartDate: row[12] || '',
-      baselineEndDate: row[13] || '',
-      actualStartDate: row[14] || '',
-      actualFinishDate: row[15] || '',
-      forecastStartDate: row[16] || '',
-      forecastFinishDate: row[17] || ''
+      uom: row[2] || '',
+      blockCapacity: row[3] || '',
+      phase: row[4] || '',
+      block: row[5] || '',
+      spvNumber: row[6] || '',
+      priority: row[7] || '',
+      scope: row[8] || '',
+      hold: row[9] || '',
+      front: row[10] || '',
+      completed: row[11] || '',
+      balance: row[12] || '',
+      baselineStartDate: row[13] || '',
+      baselineEndDate: row[14] || '',
+      bl1Start: row[15] || '',
+      bl1Finish: row[16] || '',
+      bl2Start: row[17] || '',
+      bl2Finish: row[18] || '',
+      bl3Start: row[19] || '',
+      bl3Finish: row[20] || '',
+      actualStartDate: row[21] || '',
+      actualFinishDate: row[22] || '',
+      forecastStartDate: row[23] || '',
+      forecastFinishDate: row[24] || ''
     }));
 
     if (selectedBlock !== "ALL") {
       const fullDataCopy = [...data];
       updatedData.forEach(updatedRow => {
-          const idx = fullDataCopy.findIndex(d => d.activityId === updatedRow.activityId);
-          if (idx !== -1) fullDataCopy[idx] = updatedRow;
+        const idx = fullDataCopy.findIndex(d => d.activityId === updatedRow.activityId);
+        if (idx !== -1) fullDataCopy[idx] = updatedRow;
       });
       setData(fullDataCopy);
     } else {
@@ -187,6 +225,7 @@ export function DPBlockTable({ data, setData, onSave, onSubmit, yesterday, today
         onSubmit={onSubmit}
         isReadOnly={isLocked}
         editableColumns={editableColumns}
+        disableAutoHeaderColors={true}
         columnTypes={{
           "Activity ID": "text",
           "Activity": "text",
@@ -195,13 +234,19 @@ export function DPBlockTable({ data, setData, onSave, onSubmit, yesterday, today
           "Block": "text",
           "SPV Number": "text",
           "Priority": "text",
-          "Scope": "number",
+          "Total Quantity": "number",
           "Hold": "text",
           "Front": "number",
           "Completed": "number",
           "Balance": "number",
-          "Baseline Start": "date",
-          "Baseline End": "date",
+          "Baseline Start": "text",
+          "Baseline End": "text",
+          "Baseline 1 Start": "text",
+          "Baseline 1 Finish": "text",
+          "Baseline 2 Start": "text",
+          "Baseline 2 Finish": "text",
+          "Baseline 3 Start": "text",
+          "Baseline 3 Finish": "text",
           "Actual Start": "date",
           "Actual Finish": "date",
           "Forecast Start": "date",
@@ -229,13 +274,19 @@ export function DPBlockTable({ data, setData, onSave, onSubmit, yesterday, today
             { label: "Block", colSpan: 1 },
             { label: "SPV Number", colSpan: 1 },
             { label: "Priority", colSpan: 1 },
-            { label: "Scope", colSpan: 1 },
+            { label: "Total Quantity", colSpan: 1 },
             { label: "Hold", colSpan: 1 },
             { label: "Front", colSpan: 1 },
             { label: "Completed", colSpan: 1 },
             { label: "Balance", colSpan: 1 },
             { label: "Baseline Start", colSpan: 1 },
             { label: "Baseline End", colSpan: 1 },
+            { label: "Baseline 1 Start", colSpan: 1 },
+            { label: "Baseline 1 Finish", colSpan: 1 },
+            { label: "Baseline 2 Start", colSpan: 1 },
+            { label: "Baseline 2 Finish", colSpan: 1 },
+            { label: "Baseline 3 Start", colSpan: 1 },
+            { label: "Baseline 3 Finish", colSpan: 1 },
             { label: "Actual Start", colSpan: 1 },
             { label: "Actual Finish", colSpan: 1 },
             { label: "Forecast Start", colSpan: 1 },

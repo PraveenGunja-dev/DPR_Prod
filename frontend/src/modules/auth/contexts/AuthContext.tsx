@@ -12,6 +12,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   isPendingApproval: boolean;
+  hasPendingRequest: boolean;
+  setHasPendingRequest: (val: boolean) => void;
   refreshUserProfile: () => Promise<void>;
   setUserFromSSO: (user: User, accessToken: string, refreshToken: string) => void;
 }
@@ -27,16 +29,65 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
   const [refreshTokenState, setRefreshToken] = useState<string | null>(() => localStorage.getItem('refreshToken'));
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('token'));
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return !!localStorage.getItem('token') && !!localStorage.getItem('user');
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    // If we're coming back with SSO data, start in loading state
+    return window.location.hash.includes('sso_data=');
+  });
+  const [hasPendingRequestState, setHasPendingRequestState] = useState<boolean>(() => {
+    return localStorage.getItem('has_pending_request') === 'true';
+  });
+
+  const setHasPendingRequest = (val: boolean) => {
+    setHasPendingRequestState(val);
+    localStorage.setItem('has_pending_request', val ? 'true' : 'false');
+  };
 
   const isPendingApproval = (user?.role || user?.Role) === 'pending_approval';
 
+  // Handle SSO data from URL hash (redirected from Python backend)
   useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    if (storedToken) {
-      setIsAuthenticated(true);
-    }
+    const handleSSOCallback = () => {
+      const hash = window.location.hash;
+      if (hash && hash.includes('sso_data=')) {
+        try {
+          // Keep isLoading as true while processing
+          const ssoDataRaw = hash.split('sso_data=')[1];
+          const ssoData = JSON.parse(decodeURIComponent(ssoDataRaw));
+          
+          if (ssoData.token && ssoData.refreshToken && ssoData.user) {
+            setUserFromSSO(ssoData.user, ssoData.token, ssoData.refreshToken);
+            // Clear the hash to keep URL clean
+            window.history.replaceState(null, '', window.location.pathname);
+          } else if (ssoData.status === 'pending_approval') {
+            setIsAuthenticated(false);
+            setUser(ssoData.user);
+            setHasPendingRequest(!!ssoData.hasPendingRequest);
+            localStorage.removeItem('token');
+            localStorage.removeItem('refreshToken');
+            localStorage.setItem('user', JSON.stringify(ssoData.user));
+            localStorage.setItem('sso_pending_user', JSON.stringify(ssoData.user));
+            localStorage.setItem('has_pending_request', ssoData.hasPendingRequest ? 'true' : 'false');
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+        } catch (err) {
+          console.error('[AuthContext] Error parsing SSO data from fragment:', err);
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        // No SSO hash, ensure were not stuck in loading
+        if (isLoading && window.location.hash.includes('sso_data=')) {
+           // This shouldn't really happen if the hash was just there, 
+           // but let's be safe.
+        } else if (isLoading) {
+           setIsLoading(false);
+        }
+      }
+    };
+    handleSSOCallback();
   }, []);
 
   // Token refresh effect
@@ -142,6 +193,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
       localStorage.removeItem('sso_pending_user');
+      localStorage.removeItem('has_pending_request');
+      setHasPendingRequest(false);
     }
   };
 
@@ -149,7 +202,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     <AuthContext.Provider value={{ 
       user, token, refreshToken: refreshTokenState, 
       login, ssoLogin, logout, 
-      isAuthenticated, isLoading, isPendingApproval,
+      isAuthenticated, isLoading, isPendingApproval, 
+      hasPendingRequest: hasPendingRequestState, 
+      setHasPendingRequest,
       refreshUserProfile, setUserFromSSO
     }}>
       {children}

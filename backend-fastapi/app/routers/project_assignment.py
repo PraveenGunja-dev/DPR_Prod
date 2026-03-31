@@ -130,7 +130,8 @@ async def get_user_projects(
     """Get projects assigned to a specific user."""
     rows = await pool.fetch("""
         SELECT p."ObjectId" AS id, p."Name" AS name, pa.sheet_types, p."Status" AS status,
-               p."StartDate" AS "PlannedStartDate", p."FinishDate" AS "PlannedFinishDate"
+               p."StartDate" AS "PlannedStartDate", p."FinishDate" AS "PlannedFinishDate",
+               p.project_type AS "projectType", p."Id" AS "P6Id"
         FROM p6_projects p
         JOIN project_assignments pa ON p."ObjectId" = pa.project_id
         WHERE pa.user_id = $1
@@ -227,7 +228,8 @@ async def get_assigned_projects(
     user_id = current_user["userId"]
     rows = await pool.fetch("""
         SELECT p."ObjectId" AS id, p."Name" AS name, pa.sheet_types, p."Status" AS status,
-               p."StartDate" AS "PlannedStartDate", p."FinishDate" AS "PlannedFinishDate"
+               p."StartDate" AS "PlannedStartDate", p."FinishDate" AS "PlannedFinishDate",
+               p.project_type AS "projectType", p."Id" AS "P6Id"
         FROM p6_projects p
         JOIN project_assignments pa ON p."ObjectId" = pa.project_id
         WHERE pa.user_id = $1

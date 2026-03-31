@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { FileText, CheckCircle, Clock, AlertCircle, History } from "lucide-react";
+import { FileText, CheckCircle, Clock, AlertCircle, History, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,13 +31,14 @@ export const PMDashboardSummary: React.FC<PMDashboardSummaryProps> = ({
     onShowComparison
 }) => {
     // Filter entries by status
-    const reviewedEntries = (submittedEntries || []).filter(e => e.status === 'approved_by_pm');
+    const reviewedEntries = (submittedEntries || []).filter(e => e.status === 'approved_by_pm' || e.status === 'final_approved');
     const pendingEntries = (submittedEntries || []).filter(e => e.status === 'submitted_to_pm');
     const revisionEntries = (submittedEntries || []).filter(e => e.status === 'rejected_by_pm');
+    const pushedEntries = (submittedEntries || []).filter(e => e.status === 'final_approved');
 
     const statsData = [
         {
-            title: "Total Sheets",
+            title: "Total",
             value: (submittedEntries || []).length,
             icon: FileText,
             filterType: "total" as StatFilterType,
@@ -47,6 +48,20 @@ export const PMDashboardSummary: React.FC<PMDashboardSummaryProps> = ({
                 bg: "bg-blue-100 dark:bg-blue-900/40",
                 border: "hover:border-blue-400/60 dark:hover:border-blue-500/60",
                 iconBgHover: "group-hover:bg-blue-500",
+                iconTextHover: "group-hover:text-white"
+            }
+        },
+        {
+            title: "Pushed",
+            value: pushedEntries.length,
+            icon: Upload,
+            filterType: "pushed" as any,
+            entries: pushedEntries,
+            colorClasses: {
+                text: "text-primary dark:text-primary/80",
+                bg: "bg-primary/10 dark:bg-primary/20",
+                border: "hover:border-primary/60 dark:hover:border-primary/80",
+                iconBgHover: "group-hover:bg-primary",
                 iconTextHover: "group-hover:text-white"
             }
         },
@@ -145,7 +160,7 @@ export const PMDashboardSummary: React.FC<PMDashboardSummaryProps> = ({
 
             {/* Stats Cards - Clickable */}
             <motion.div
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
+                className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.5 }}

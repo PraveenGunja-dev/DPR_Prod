@@ -57,8 +57,13 @@ class Settings(BaseSettings):
 
     # ── App ───────────────────────────────────────────────────────
     APP_BASE_URL: str = "http://localhost:5173"
-    SUPER_ADMIN_EMAIL: str = "rohit.sharma6@adani.com"
+    SUPER_ADMIN_EMAIL: str = "rohit.sharma6@adani.com,praveen.gunja@adani.com"
     PORT: int = 3316
+
+    @property
+    def super_admin_emails(self) -> list[str]:
+        """Returns a list of Super Admin emails from the comma-separated string."""
+        return [email.strip().lower() for email in self.SUPER_ADMIN_EMAIL.split(",") if email.strip()]
 
     # ── Pool ──────────────────────────────────────────────────────
     DB_POOL_MIN_SIZE: int = 5

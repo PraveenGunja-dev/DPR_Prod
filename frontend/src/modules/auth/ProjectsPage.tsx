@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from '@/modules/auth/contexts/AuthContext';
+import { useFilter } from "@/modules/auth/contexts/FilterContext";
 import { getUserProjects, getAssignedProjects } from "@/services/projectService";
 import { toast } from "sonner";
 import { ProjectListing } from "@/components/ProjectListing";
@@ -10,6 +11,7 @@ import { ProjectsHeader, ProjectsEmptyState } from "./components";
 import { ProjectAssignmentModal } from "@/components/shared/ProjectAssignmentModal";
 import { CreateUserModal } from "@/components/shared/CreateUserModal";
 import { Project } from "@/types";
+import { syncP6Data } from "@/services/p6ActivityService";
 import {
     Pagination,
     PaginationContent,
@@ -22,10 +24,10 @@ import {
 const ProjectsPage = () => {
     const navigate = useNavigate();
     const { user, token } = useAuth();
+    const { searchTerm, setSearchTerm, typeFilter, setTypeFilter, yearFilter, setYearFilter } = useFilter();
     const [projects, setProjects] = useState<Project[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [searchTerm, setSearchTerm] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
     const projectsPerPage = 10;
 
@@ -35,17 +37,56 @@ const ProjectsPage = () => {
     const [selectedAssignProject, setSelectedAssignProject] = useState<Project | null>(null);
     const [showCreateUserModal, setShowCreateUserModal] = useState(false);
 
+    // Extract FY year from P6Id or fallback to StartDate (April-March FY)
+    const extractFY = (project: any): string => {
+        const p6Id = project.P6Id || (project as any).p6Id || '';
+        if (p6Id) {
+            const match = p6Id.match(/FY\d{2}/i);
+            if (match) return match[0].toUpperCase();
+        }
+        
+        const startDate = (project as any).PlannedStartDate || (project as any).planStart || (project as any).PlanStart || (project as any).StartDate;
+        if (startDate && startDate !== 'N/A') {
+            const date = new Date(startDate);
+            if (!isNaN(date.getTime())) {
+                const year = date.getFullYear();
+                const month = date.getMonth(); // 0 is Jan
+                const fyYear = month >= 3 ? year + 1 : year;
+                return `FY${String(fyYear).slice(-2)}`;
+            }
+        }
+        return '';
+    };
+
+    // Compute unique available years from all projects
+    const availableYears = useMemo(() => {
+        const years = new Set<string>();
+        projects.forEach(p => {
+            const fy = extractFY(p);
+            if (fy) years.add(fy);
+        });
+        return Array.from(years).sort();
+    }, [projects]);
+
     const filteredProjects = useMemo(() => {
         return projects.filter(p => {
             const name = p.name || (p as any).Name || "";
-            return name.toLowerCase().includes(searchTerm.toLowerCase());
-        });
-    }, [projects, searchTerm]);
+            const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase());
+            
+            const pType = (p.project_type || (p as any).ProjectType || (p as any).projectType || 'solar').toLowerCase();
+            const matchesType = typeFilter === "ALL" || pType === typeFilter.toLowerCase();
 
-    // Reset pagination to page 1 whenever search query changes
+            const fy = extractFY(p);
+            const matchesYear = yearFilter === "ALL" || fy === yearFilter;
+            
+            return matchesSearch && matchesType && matchesYear;
+        });
+    }, [projects, searchTerm, typeFilter, yearFilter]);
+
+    // Reset pagination to page 1 whenever any filter changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm]);
+    }, [searchTerm, typeFilter, yearFilter]);
 
     const totalPages = Math.ceil(filteredProjects.length / projectsPerPage);
     const startIndex = (currentPage - 1) * projectsPerPage;
@@ -86,7 +127,8 @@ const ProjectsPage = () => {
     const fetchProjects = async () => {
         try {
             setLoading(true);
-            const data = (user?.role === "supervisor" || user?.Role === "supervisor") 
+            const role = user?.role || user?.Role;
+            const data = (role === "supervisor" || role === "Site PM") 
                 ? await getAssignedProjects() 
                 : await getUserProjects();
             setProjects(data);
@@ -114,27 +156,58 @@ const ProjectsPage = () => {
             }
         });
     };
+    
+    const [isSyncing, setIsSyncing] = useState<string | number | null>(null);
+
+    const handleSyncProject = async (project: any) => {
+        const pId = project.id || (project.originalProject as any).ObjectId;
+        try {
+            setIsSyncing(pId);
+            toast.info(`Starting sync for ${project.name}...`);
+            await syncP6Data(pId);
+            toast.success(`${project.name} synced from P6`);
+            fetchProjects(); // Refresh project list to update last sync date
+        } catch (error) {
+            console.error("Sync error:", error);
+            toast.error(`Failed to sync ${project.name}`);
+        } finally {
+            setIsSyncing(null);
+        }
+    };
 
     return (
         <DashboardLayout userName={user?.name || user?.Name || "User"} userRole={user?.role || user?.Role}>
-            <ProjectsHeader userRole={user?.role || user?.Role} searchTerm={searchTerm} onSearchChange={setSearchTerm} onAddUserClick={() => setShowCreateUserModal(true)} />
+            <ProjectsHeader 
+                userRole={user?.role || user?.Role} 
+                searchTerm={searchTerm} 
+                onSearchChange={setSearchTerm} 
+                typeFilter={typeFilter}
+                onTypeFilterChange={setTypeFilter}
+                yearFilter={yearFilter}
+                onYearFilterChange={setYearFilter}
+                availableYears={availableYears}
+                onAddUserClick={() => setShowCreateUserModal(true)} 
+            />
             
             {loading ? <ProjectsEmptyState isLoading={true} /> : filteredProjects.length === 0 ? <ProjectsEmptyState searchTerm={searchTerm} /> : (
                 <div className="w-full">
                     <ProjectListing
                         projects={paginatedProjects.map(p => ({
+                            id: p.id || (p as any).ObjectId,
                             name: formatProjectName(p.name || (p as any).Name),
                             location: p.location || (p as any).Location || '',
                             status: p.status || (p as any).Status || 'Active',
                             startDate: formatDateOnly((p as any).PlannedStartDate || (p as any).planStart || 'N/A'),
                             endDate: formatDateOnly((p as any).PlannedFinishDate || (p as any).planEnd || 'N/A'),
                             sheetTypes: (p as any).sheetTypes || (p as any).SheetTypes || (p as any).sheet_types || [],
+                            projectType: (p as any).projectType || p.project_type || (p as any).ProjectType || 'solar',
                             originalProject: p
                         }))}
                         onProjectClick={(p: any) => handleProjectSelect(p.originalProject)}
                         userRole={user?.role || user?.Role}
                         onSummaryClick={(p: any) => { setSelectedSummaryProject(p.originalProject); setShowSummaryModal(true); }}
                         onAssignClick={(p: any) => { setSelectedAssignProject(p.originalProject); setShowAssignmentModal(true); }}
+                        onSyncClick={handleSyncProject}
                     />
 
                     {totalPages > 1 && (

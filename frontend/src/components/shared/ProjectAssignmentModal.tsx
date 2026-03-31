@@ -88,12 +88,19 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
 
         setLoading(true);
         try {
+            // Safe extraction of project ID
+            const pId = project.ObjectId || (project as any).id || (project as any).objectId;
+            if (!pId) {
+                console.error("No project ID found on project object:", project);
+                return;
+            }
+
             // Fetch all supervisors
             const supervisorsList = await getAllSupervisors();
             setSupervisors(supervisorsList);
 
             // Fetch assigned supervisors for this project
-            const assignedList = await getProjectSupervisors(project.ObjectId);
+            const assignedList = await getProjectSupervisors(pId);
             setAssignedSupervisors(assignedList);
 
             // Fetch Site PMs if user is PMAG
@@ -103,7 +110,7 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
                     setSitePMs(sitePMsList);
 
                     // Fetch assigned Site PMs for this project
-                    const assignedSitePMsList = await getProjectSitePMs(project.ObjectId);
+                    const assignedSitePMsList = await getProjectSitePMs(pId);
                     setAssignedSitePMs(assignedSitePMsList);
                 } catch (err) {
                     console.error("Error fetching Site PMs:", err);
@@ -149,16 +156,18 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
     const confirmAssignment = async () => {
         if (!project || !pendingUser) return;
 
+        setLoading(true);
         try {
-            setLoading(true);
+            const pId = project.ObjectId || (project as any).id || (project as any).objectId;
+            if (!pId) throw new Error("Missing Project ID");
 
             // If editing existing, we might need to unassign first if backend is strict
             if (isEditingExisting) {
-                await unassignProjectFromSupervisor(project.ObjectId, pendingUser.ObjectId);
+                await unassignProjectFromSupervisor(pId, pendingUser.ObjectId);
             }
 
             // Assign
-            await assignProjectToSupervisor(project.ObjectId, pendingUser.ObjectId, tempSelectedSheets);
+            await assignProjectToSupervisor(pId, pendingUser.ObjectId, tempSelectedSheets);
             toast.success(`${pendingUser.Role || 'User'} assigned successfully`);
 
             hasChanges.current = true;
@@ -176,11 +185,12 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
     };
 
     const handleUnassign = async () => {
-        if (!project || !pendingUser) return;
-
         try {
             setLoading(true);
-            await unassignProjectFromSupervisor(project.ObjectId, pendingUser.ObjectId);
+            const pId = project.ObjectId || (project as any).id || (project as any).objectId;
+            if (!pId) throw new Error("Missing Project ID");
+            
+            await unassignProjectFromSupervisor(pId, pendingUser.ObjectId);
             toast.success("Assignment removed successfully");
 
             hasChanges.current = true;
@@ -261,7 +271,7 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
             isOpen={isOpen}
             onClose={handleClose}
             title="Assign Users to Project"
-            description={project.Name}
+            description={project.Name || (project as any).name || "Project"}
             icon={<Users size={20} />}
             maxWidth="max-w-4xl"
             footer={
@@ -275,11 +285,11 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
             {/* Project Info Header */}
             <div className="mb-6 p-4 rounded-lg bg-muted/50 border border-border flex items-center justify-between">
                 <div>
-                    <h3 className="font-semibold text-lg text-foreground">{project.Name}</h3>
-                    {project.Location && (
+                    <h3 className="font-semibold text-lg text-foreground">{project.Name || (project as any).name}</h3>
+                    {(project.Location || (project as any).location) && (
                         <div className="flex items-center gap-1 mt-1 text-sm text-muted-foreground">
                             <MapPin size={14} />
-                            <span>{project.Location}</span>
+                            <span>{project.Location || (project as any).location}</span>
                         </div>
                     )}
                 </div>
@@ -410,7 +420,7 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
                 isOpen={sheetModalOpen}
                 onClose={() => { setSheetModalOpen(false); setPendingUser(null); }}
                 title={isEditingExisting ? "Edit Sheet Access" : "Select Sheet Access"}
-                description={`${pendingUser?.Name} - ${project.Name}`}
+                description={`${pendingUser?.Name} - ${project.Name || (project as any).name}`}
                 maxWidth="max-w-md"
                 footer={
                     <div className="flex justify-between w-full">

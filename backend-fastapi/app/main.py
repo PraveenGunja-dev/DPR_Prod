@@ -50,17 +50,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Migration error (non-fatal): {e}")
 
-    # 3. Start background job scheduler
-    try:
-        from apscheduler.schedulers.asyncio import AsyncIOScheduler
-        from app.jobs.auto_approval import run_auto_approval
-
-        scheduler = AsyncIOScheduler()
-        scheduler.add_job(run_auto_approval, "interval", hours=1, id="auto_approval")
-        scheduler.start()
-        logger.info("✓ Background job scheduler started (auto-approval every 1 hour)")
-    except Exception as e:
-        logger.error(f"Failed to start scheduler: {e}")
+    # 3. Background job scheduler has been disabled as per request
 
     logger.info(f"✓ Server ready on port {settings.PORT}")
     logger.info("=" * 60)

@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { BrowserRouter, Routes, Route } from "react-router-dom"
 import { AuthProvider } from "@/modules/auth/contexts/AuthContext"
+import { FilterProvider } from "@/modules/auth/contexts/FilterContext"
 import { NotificationProvider } from "@/modules/auth/contexts/NotificationContext"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/toaster"
@@ -24,8 +25,9 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
       <AuthProvider>
-        <NotificationProvider>
-          <TooltipProvider>
+        <FilterProvider>
+          <NotificationProvider>
+            <TooltipProvider>
             <Toaster />
             <Sonner />
             <BrowserRouter basename="/">
@@ -95,6 +97,7 @@ const App = () => (
             </BrowserRouter>
           </TooltipProvider>
         </NotificationProvider>
+        </FilterProvider>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>

@@ -99,7 +99,7 @@ async def approval_flow(
                 SELECT TO_CHAR(submitted_at, 'DD-Mon') as name,
                        SUM(CASE WHEN status = 'submitted_to_pm' THEN 1 ELSE 0 END) as submitted,
                        SUM(CASE WHEN status IN ('approved_by_pm', 'final_approved') THEN 1 ELSE 0 END) as approved,
-                       SUM(CASE WHEN status LIKE '%rejected%' THEN 1 ELSE 0 END) as rejected
+                       SUM(CASE WHEN status LIKE '%%rejected%%' THEN 1 ELSE 0 END) as rejected
                 FROM dpr_supervisor_entries WHERE project_id = $1
                 GROUP BY 1, DATE(submitted_at) ORDER BY DATE(submitted_at) DESC LIMIT 7
             """, projectId)
@@ -108,7 +108,7 @@ async def approval_flow(
                 SELECT TO_CHAR(submitted_at, 'DD-Mon') as name,
                        SUM(CASE WHEN status = 'submitted_to_pm' THEN 1 ELSE 0 END) as submitted,
                        SUM(CASE WHEN status IN ('approved_by_pm', 'final_approved') THEN 1 ELSE 0 END) as approved,
-                       SUM(CASE WHEN status LIKE '%rejected%' THEN 1 ELSE 0 END) as rejected
+                       SUM(CASE WHEN status LIKE '%%rejected%%' THEN 1 ELSE 0 END) as rejected
                 FROM dpr_supervisor_entries
                 GROUP BY 1, DATE(submitted_at) ORDER BY DATE(submitted_at) DESC LIMIT 7
             """)
@@ -157,13 +157,13 @@ async def rejection_distribution(
         if projectId:
             rows = await pool.fetch("""
                 SELECT COALESCE(rejection_reason, 'Other') as name, COUNT(*) as value
-                FROM dpr_supervisor_entries WHERE project_id = $1 AND status LIKE '%rejected%'
+                FROM dpr_supervisor_entries WHERE project_id = $1 AND status LIKE '%%rejected%%'
                 GROUP BY 1 ORDER BY value DESC LIMIT 5
             """, projectId)
         else:
             rows = await pool.fetch("""
                 SELECT COALESCE(rejection_reason, 'Other') as name, COUNT(*) as value
-                FROM dpr_supervisor_entries WHERE status LIKE '%rejected%'
+                FROM dpr_supervisor_entries WHERE status LIKE '%%rejected%%'
                 GROUP BY 1 ORDER BY value DESC LIMIT 5
             """)
         return [{"name": r["name"] or "Unspecified", "value": int(r["value"])} for r in rows]

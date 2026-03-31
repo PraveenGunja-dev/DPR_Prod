@@ -1,39 +1,18 @@
-import { useState, useEffect } from "react";
-import { Input } from "@/components/ui/input";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import React from "react";
 import { Button } from "@/components/ui/button";
-import { Save, Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, AlertCircle, Trash2 } from "lucide-react";
 import { StyledExcelTable } from "@/components/StyledExcelTable";
 import {
   getDraftEntry,
   saveDraftEntry,
   submitEntry
 } from "@/services/dprService";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from "sonner";
+import { MmsRfiFormModal, MmsRfiFormData } from "./MmsRfiFormModal";
 
-interface DynamicColumn {
-  id: number;
-  project_id: number;
-  column_name: string;
-  display_name: string;
-  data_type: string;
-  is_required: boolean;
-  default_value: string | null;
-  position: number;
-  created_by: number;
-  created_at: string;
-  updated_at: string;
-  is_active: boolean;
-}
-
-interface MmsModuleRfiData {
+interface MmsModuleRfiRow {
+  id: string;
   rfiNo: string;
   subject: string;
   module: string;
@@ -55,6 +34,7 @@ interface MmsModuleRfiTableWithDynamicColumnsProps {
   status?: string;
   onExportAll?: () => void;
   universalFilter?: string;
+  selectedBlock?: string;
 }
 
 export function MmsModuleRfiTableWithDynamicColumns({
@@ -65,50 +45,57 @@ export function MmsModuleRfiTableWithDynamicColumns({
   isLocked = false,
   status = 'draft',
   onExportAll,
-  universalFilter
+  universalFilter,
+  selectedBlock
 }: MmsModuleRfiTableWithDynamicColumnsProps) {
-  const [dynamicColumns, setDynamicColumns] = useState<DynamicColumn[]>([]);
-  const [entry, setEntry] = useState<any>(null);
+  const [rows, setRows] = useState<MmsModuleRfiRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isManageColumnsOpen, setIsManageColumnsOpen] = useState(false);
-  const [newColumn, setNewColumn] = useState({
-    columnName: '',
-    displayName: '',
-    dataType: 'text',
-    isRequired: false,
-    defaultValue: ''
-  });
+  const [entryId, setEntryId] = useState<number | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  // Load entry data using the standard dprSupervisorService API
+  // Load entry data
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true);
-
-        // Load entry data using standard API with sheet_type='mms_module_rfi'
         const draftEntry = await getDraftEntry(projectId, 'mms_module_rfi');
 
-        // Parse data_json if it's a string
-        if (draftEntry && typeof draftEntry.data_json === 'string') {
-          try {
-            draftEntry.data_json = JSON.parse(draftEntry.data_json);
-          } catch (parseError) {
-            console.error('Error parsing data_json:', parseError);
-            draftEntry.data_json = { rows: [] };
+        if (draftEntry) {
+          setEntryId(draftEntry.id);
+
+          // Parse data_json if string
+          let dataJson = draftEntry.data_json;
+          if (typeof dataJson === 'string') {
+            try {
+              dataJson = JSON.parse(dataJson);
+            } catch {
+              dataJson = { rows: [] };
+            }
           }
-        }
 
-        // Ensure data_json has the expected structure
-        if (draftEntry && (!draftEntry.data_json || !draftEntry.data_json.rows)) {
-          draftEntry.data_json = { rows: [] };
-        }
+          // Extract rows
+          const savedRows = dataJson?.rows || [];
+          // Ensure each row has an id
+          const rowsWithIds = savedRows.map((row: any, index: number) => ({
+            id: row.id || `row-${Date.now()}-${index}`,
+            rfiNo: row.rfiNo || '',
+            subject: row.subject || '',
+            module: row.module || '',
+            submittedDate: row.submittedDate || '',
+            responseDate: row.responseDate || '',
+            status: row.status || '',
+            remarks: row.remarks || '',
+            yesterdayValue: row.yesterdayValue || '',
+            todayValue: row.todayValue || '',
+          }));
 
-        setEntry(draftEntry);
+          setRows(rowsWithIds);
+        }
 
         setError(null);
       } catch (err) {
-        console.error('Error loading data:', err);
+        console.error('Error loading MMS/RFI data:', err);
         setError('Failed to load data');
       } finally {
         setIsLoading(false);
@@ -120,140 +107,97 @@ export function MmsModuleRfiTableWithDynamicColumns({
     }
   }, [projectId]);
 
-  const handleAddColumn = async () => {
-    try {
-      if (!newColumn.columnName || !newColumn.displayName) {
-        setError('Column name and display name are required');
-        return;
-      }
+  // Handle adding a new row via modal
+  const handleAddEntry = useCallback((formData: MmsRfiFormData) => {
+    const newRow: MmsModuleRfiRow = {
+      id: `row-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      rfiNo: formData.rfiNo,
+      subject: formData.subject,
+      module: formData.module,
+      submittedDate: formData.submittedDate,
+      responseDate: formData.responseDate,
+      status: formData.status,
+      remarks: formData.remarks,
+      yesterdayValue: '',
+      todayValue: '',
+    };
 
-      // Dynamic columns not yet implemented in standard API
-      console.warn('Dynamic columns feature coming soon');
-      setError('Dynamic columns feature coming soon');
+    setRows(prev => [...prev, newRow]);
+    setIsAddModalOpen(false);
+    toast.success("MMS/RFI entry added successfully!");
+  }, []);
 
-      // Reset form
-      setNewColumn({
-        columnName: '',
-        displayName: '',
-        dataType: 'text',
-        isRequired: false,
-        defaultValue: ''
-      });
+  // Handle deleting a row
+  const handleDeleteRow = useCallback((rowIndex: number) => {
+    setRows(prev => prev.filter((_, i) => i !== rowIndex));
+    toast.success("Entry removed");
+  }, []);
 
-      setIsManageColumnsOpen(false);
-    } catch (err) {
-      console.error('Error adding column:', err);
-      setError('Failed to add column');
+  // Handle save
+  const handleSaveEntry = useCallback(async () => {
+    if (!entryId) {
+      toast.error("No draft entry found. Please try refreshing.");
+      return;
     }
-  };
 
-  const handleRemoveColumn = async (columnId: number) => {
     try {
-      // Dynamic columns not yet implemented in standard API
-      console.warn('Dynamic columns feature coming soon');
+      const dataToSave = {
+        rows: rows.map(({ id, ...rest }) => ({ ...rest, id }))
+      };
+      await saveDraftEntry(entryId, dataToSave);
+      toast.success(`Saved ${rows.length} MMS/RFI entries successfully!`);
       setError(null);
     } catch (err) {
-      console.error('Error removing column:', err);
-      setError('Failed to remove column');
+      console.error('Error saving MMS/RFI entry:', err);
+      toast.error("Failed to save MMS/RFI data");
     }
-  };
+  }, [entryId, rows]);
 
-  const handleSaveEntry = async () => {
-    if (!entry) return;
+  // Handle submit
+  const handleSubmitEntry = useCallback(async () => {
+    if (!entryId) {
+      toast.error("No draft entry found. Please try refreshing.");
+      return;
+    }
 
     try {
-      await saveDraftEntry(entry.id, entry.data_json);
-      // Reload entry to get updated data
-      const updatedEntry = await getDraftEntry(projectId, 'mms_module_rfi');
-      setEntry(updatedEntry);
+      // Save first, then submit
+      const dataToSave = {
+        rows: rows.map(({ id, ...rest }) => ({ ...rest, id }))
+      };
+      await saveDraftEntry(entryId, dataToSave);
+      await submitEntry(entryId);
+      toast.success("MMS/RFI data submitted for review!");
       setError(null);
     } catch (err) {
-      console.error('Error saving entry:', err);
-      setError('Failed to save entry');
+      console.error('Error submitting MMS/RFI entry:', err);
+      toast.error("Failed to submit MMS/RFI data");
     }
-  };
+  }, [entryId, rows]);
 
-  const handleSubmitEntry = async () => {
-    if (!entry) return;
-
-    try {
-      await submitEntry(entry.id);
-      // Reload the entry to get updated status
-      const updatedEntry = await getDraftEntry(projectId, 'mms_module_rfi');
-      setEntry(updatedEntry);
-      setError(null);
-    } catch (err) {
-      console.error('Error submitting entry:', err);
-      setError('Failed to submit entry');
-    }
-  };
-
-  const handleDataChange = (newData: any[][]) => {
-    if (!entry) return;
-
-    // Convert array of arrays back to rows with column names
-    const updatedRows = newData.map(row => {
-      const rowObj: any = {};
-
-      // Add fixed columns
-      rowObj.rfiNo = row[0] || '';
-      rowObj.subject = row[1] || '';
-      rowObj.module = row[2] || '';
-      rowObj.submittedDate = row[3] || '';
-      rowObj.responseDate = row[4] || '';
-      rowObj.status = row[5] || '';
-      rowObj.remarks = row[6] || '';
-      rowObj.yesterdayValue = row[7] || '';
-      rowObj.todayValue = row[8] || '';
-
-      // Add dynamic columns
-      dynamicColumns.forEach((col, index) => {
-        rowObj[col.column_name] = row[9 + index] || '';
+  // Handle data changes from inline editing in StyledExcelTable
+  const handleDataChange = useCallback((newData: any[][]) => {
+    setRows(prev => {
+      return newData.map((rowArr, index) => {
+        const existingRow = prev[index];
+        return {
+          id: existingRow?.id || `row-${Date.now()}-${index}`,
+          rfiNo: rowArr[0] || '',
+          subject: rowArr[1] || '',
+          module: rowArr[2] || '',
+          submittedDate: rowArr[3] || '',
+          responseDate: rowArr[4] || '',
+          status: rowArr[5] || '',
+          remarks: rowArr[6] || '',
+          yesterdayValue: rowArr[7] || '',
+          todayValue: rowArr[8] || '',
+        };
       });
-
-      return rowObj;
     });
+  }, []);
 
-    setEntry({
-      ...entry,
-      data_json: {
-        ...entry.data_json,
-        rows: updatedRows
-      }
-    });
-  };
-
-  // Convert rows to array of arrays for the table
-  const convertToTableData = () => {
-    if (!entry) return [];
-    if (!entry.data_json) return [];
-    const rows = Array.isArray(entry.data_json?.rows) ? entry.data_json.rows : [];
-    if (rows.length === 0) return [];
-
-    return rows.map((row: any) => {
-      const rowData = [
-        row.rfiNo || '',
-        row.subject || '',
-        row.module || '',
-        row.submittedDate || '',
-        row.responseDate || '',
-        row.status || '',
-        row.remarks || '',
-        row.yesterdayValue || '',
-        row.todayValue || ''
-      ];
-
-      // Add dynamic columns
-      dynamicColumns.forEach(col => {
-        rowData.push(row[col.column_name] || '');
-      });
-
-      return rowData;
-    });
-  };
-
-  // Define all columns (fixed + dynamic)
-  const allColumns = [
+  // Columns definition
+  const columns = useMemo(() => [
     "RFI No",
     "Subject",
     "Module",
@@ -262,72 +206,124 @@ export function MmsModuleRfiTableWithDynamicColumns({
     "Status",
     "Remarks",
     yesterday,
-    today,
-    ...dynamicColumns.map(col => col.display_name)
-  ];
+    today
+  ], [yesterday, today]);
 
-  // Define column types
-  const columnTypes: Record<string, 'text' | 'number' | 'date'> = {
-    "Submitted Date": "date",
-    "Response Date": "date",
-    [yesterday]: "number",
-    [today]: "number"
-  };
-
-  // Add dynamic column types
-  dynamicColumns.forEach(col => {
-    columnTypes[col.display_name] = col.data_type as 'text' | 'number' | 'date';
-  });
-
-  // Define column widths
-  const columnWidths: Record<string, number> = {
-    "RFI No": 60,
-    "Subject": 100,
-    "Module": 60,
-    "Submitted Date": 80,
-    "Response Date": 80,
-    "Status": 60,
-    "Remarks": 100,
-    [yesterday]: 60,
-    [today]: 60
-  };
-
-  // Add dynamic column widths (default to 80)
-  dynamicColumns.forEach(col => {
-    columnWidths[col.display_name] = 80;
-  });
+  // Convert rows to table data (array of arrays)
+  const tableData = useMemo(() =>
+    rows.map(row => [
+      row.rfiNo,
+      row.subject,
+      row.module,
+      row.submittedDate,
+      row.responseDate,
+      row.status,
+      row.remarks,
+      row.yesterdayValue,
+      row.todayValue
+    ]), [rows]);
 
   if (isLoading) {
-    return <div>Loading MMS & RFI data...</div>;
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
+        <span className="text-muted-foreground">Loading MMS & RFI data...</span>
+      </div>
+    );
   }
 
-  if (error) {
-    return <div className="text-red-500">Error: {error}</div>;
+  if (error && rows.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        <AlertCircle className="mx-auto h-12 w-12 opacity-50 text-red-400" />
+        <h3 className="mt-2 text-lg font-medium text-red-600">Error loading data</h3>
+        <p className="mt-1">{error}</p>
+      </div>
+    );
+  }
+
+  // Empty state - similar to Issues tab
+  if (rows.length === 0 && !isLocked) {
+    return (
+      <div className="space-y-4 w-full">
+        <div className="bg-muted p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-base mb-1">MMS & Module RFI</h3>
+              <p className="text-xs">Reporting Date: {today}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="text-center py-8 text-muted-foreground">
+          <AlertCircle className="mx-auto h-12 w-12 opacity-50" />
+          <h3 className="mt-2 text-lg font-medium">No MMS / RFI entries</h3>
+          <p className="mt-1">Get started by adding a new MMS or RFI entry.</p>
+          <div className="mt-4">
+            <Button onClick={() => setIsAddModalOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Your First MMS / RFI Entry
+            </Button>
+          </div>
+        </div>
+
+        <MmsRfiFormModal
+          open={isAddModalOpen}
+          onOpenChange={setIsAddModalOpen}
+          onSubmit={handleAddEntry}
+        />
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4 w-full">
       <div className="bg-muted p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-        <div>
-          <h3 className="font-bold text-base mb-1">MMS & Module RFI</h3>
-          <p className="text-xs">Reporting Date: {today}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-base mb-1">MMS & Module RFI</h3>
+            <p className="text-xs">Reporting Date: {today} | {rows.length} entries</p>
+          </div>
+          {!isLocked && (
+            <Button
+              size="sm"
+              onClick={() => setIsAddModalOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Entry
+            </Button>
+          )}
         </div>
       </div>
 
-
-
       <StyledExcelTable
         title="MMS & Module RFI Table"
-        columns={allColumns}
-        data={convertToTableData()}
+        columns={columns}
+        data={tableData}
         onDataChange={handleDataChange}
-        onSave={handleSaveEntry}
-        onSubmit={handleSubmitEntry}
+        onSave={isLocked ? undefined : handleSaveEntry}
+        onSubmit={isLocked ? undefined : handleSubmitEntry}
         isReadOnly={isLocked}
-        columnTypes={columnTypes}
-        columnWidths={columnWidths}
+        editableColumns={["RFI No", "Subject", "Module", "Submitted Date", "Response Date", "Status", "Remarks", yesterday, today]}
+        columnTypes={{
+          "Submitted Date": "date",
+          "Response Date": "date",
+          [yesterday]: "number",
+          [today]: "number"
+        }}
+        columnWidths={{
+          "RFI No": 60,
+          "Subject": 100,
+          "Module": 60,
+          "Submitted Date": 80,
+          "Response Date": 80,
+          "Status": 60,
+          "Remarks": 100,
+          [yesterday]: 60,
+          [today]: 60
+        }}
         headerStructure={[
-          // First header row - main column names
           [
             { label: "RFI No", colSpan: 1 },
             { label: "Subject", colSpan: 1 },
@@ -337,14 +333,38 @@ export function MmsModuleRfiTableWithDynamicColumns({
             { label: "Status", colSpan: 1 },
             { label: "Remarks", colSpan: 1 },
             { label: yesterday, colSpan: 1 },
-            { label: today, colSpan: 1 },
-            ...dynamicColumns.map(col => ({ label: col.display_name, colSpan: 1 }))
+            { label: today, colSpan: 1 }
           ]
         ]}
-        status={entry?.status}
-        onExportAll={onExportAll} 
-        totalRows={undefined}      
+        status={status}
+        onExportAll={onExportAll}
+        totalRows={undefined}
         externalGlobalFilter={universalFilter}
+      />
+
+      {/* Delete row buttons - render below the table when not locked */}
+      {!isLocked && rows.length > 0 && (
+        <div className="flex flex-wrap gap-2 px-2">
+          <span className="text-xs text-muted-foreground self-center mr-2">Remove entry:</span>
+          {rows.map((row, idx) => (
+            <Button
+              key={row.id}
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+              onClick={() => handleDeleteRow(idx)}
+            >
+              <Trash2 className="w-3 h-3 mr-1" />
+              Row {idx + 1} ({row.rfiNo || 'No RFI#'})
+            </Button>
+          ))}
+        </div>
+      )}
+
+      <MmsRfiFormModal
+        open={isAddModalOpen}
+        onOpenChange={setIsAddModalOpen}
+        onSubmit={handleAddEntry}
       />
     </div>
   );

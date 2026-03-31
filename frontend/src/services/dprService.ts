@@ -4,6 +4,20 @@ import { DPREntry } from '@/types';
 import axios from 'axios';
 
 /**
+ * Format a Date object to Indian date style (DD-MM-YYYY)
+ */
+export const indianDateFormat = (date: Date | string) => {
+    if (!date) return "";
+    const d = typeof date === 'string' ? new Date(date) : date;
+    if (isNaN(d.getTime())) return String(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const month = monthNames[d.getMonth()];
+    const year = String(d.getFullYear()).slice(-2);
+    return `${day}-${month}-${year}`;
+};
+
+/**
  * Handle API errors consistently
  */
 const handleApiError = (error: any, defaultMessage: string) => {
@@ -14,7 +28,7 @@ const handleApiError = (error: any, defaultMessage: string) => {
 };
 
 /**
- * Get today and yesterday dates in YYYY-MM-DD format
+ * Get today and yesterday dates in YYYY-MM-DD (ISO) format
  */
 export const getTodayAndYesterday = () => {
     const today = new Date();

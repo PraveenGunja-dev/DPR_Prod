@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { registerUser } from './services/authService';
+import { registerUser } from '@/services/userService';
 import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { User } from './services/authService';
+import { User } from '@/types';
 
 const RegisterForm = () => {
   const navigate = useNavigate();
@@ -39,12 +39,13 @@ const RegisterForm = () => {
 
     try {
       // Create user data object with correct property names for the API
-      const userData: Omit<User, 'ObjectId'> = {
-        Name: formData.Name,
-        Email: formData.Email,
+      const userData = {
+        name: formData.Name,
+        email: formData.Email,
         password: formData.password,
-        Role: formData.Role
+        role: formData.Role
       };
+
       
       await registerUser(userData);
       // Registration successful, show modal with user details

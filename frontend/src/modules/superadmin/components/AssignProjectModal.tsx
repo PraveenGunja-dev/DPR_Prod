@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 interface User {
@@ -47,6 +49,8 @@ export const AssignProjectModal: React.FC<AssignProjectModalProps> = ({
 }) => {
   const [selectedProjects, setSelectedProjects] = useState<number[]>([]);
   const [selectedSheets, setSelectedSheets] = useState<string[]>([]);
+  const [modalSearchTerm, setModalSearchTerm] = useState('');
+  const [modalYearFilter, setModalYearFilter] = useState('ALL');
 
   // Lock body scroll when modal is open
   useBodyScrollLock(isOpen);
@@ -72,10 +76,61 @@ export const AssignProjectModal: React.FC<AssignProjectModalProps> = ({
   // Get currently assigned project IDs
   const assignedProjectIds = assignedProjects.map(p => p.id || p.ObjectId);
 
-  // Filter out already assigned projects
-  const availableProjects = allProjects.filter(p =>
-    !assignedProjectIds.includes(p.ObjectId)
-  );
+  // Extract FY year or fallback to StartDate (April-March FY)
+  const extractFY = (project: any): string => {
+    const p6Id = project.P6Id || project.p6Id || project.Id || '';
+    if (p6Id) {
+      const match = p6Id.match(/FY\d{2}/i);
+      if (match) return match[0].toUpperCase();
+    }
+    
+    // Fallback to date
+    const startDate = project.PlannedStartDate || project.PlanStart || project.planStart || project.StartDate;
+    if (startDate && startDate !== 'N/A') {
+      const date = new Date(startDate);
+      if (!isNaN(date.getTime())) {
+        const year = date.getFullYear();
+        const month = date.getMonth(); // 0 is January
+        const fyYear = month >= 3 ? year + 1 : year; // FY N is Apr Y to Mar Y+1
+        return `FY${String(fyYear).slice(-2)}`;
+      }
+    }
+    return '';
+  };
+
+  // Available years for filter
+  const availableYears = React.useMemo(() => {
+    const years = new Set<string>();
+    allProjects.forEach(p => {
+      const fy = extractFY(p);
+      if (fy) years.add(fy);
+    });
+    return Array.from(years).sort();
+  }, [allProjects]);
+
+  // Filter out already assigned projects and apply modal filters
+  const availableProjects = allProjects.filter(p => {
+    const pId = p.ObjectId || p.id;
+    if (!pId) return false;
+    if (assignedProjectIds.includes(pId)) return false;
+
+    // Search filter
+    if (modalSearchTerm) {
+      const search = modalSearchTerm.toLowerCase();
+      const pName = p.Name || p.name || "";
+      if (!pName.toLowerCase().includes(search) && !pId.toString().includes(search)) {
+        return false;
+      }
+    }
+
+    // Year filter
+    if (modalYearFilter !== 'ALL') {
+      const fy = extractFY(p);
+      if (fy !== modalYearFilter) return false;
+    }
+
+    return true;
+  });
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -103,7 +158,10 @@ export const AssignProjectModal: React.FC<AssignProjectModalProps> = ({
           ) : assignedProjects.length > 0 ? (
             <div className="space-y-1 mb-4">
               {assignedProjects.map((project: any, index: number) => (
-                <div key={project.id || project.ObjectId || index} className="p-2 bg-gray-50 rounded text-sm dark:bg-gray-700 dark:text-white">
+                <div key={project.id || project.ObjectId || index} className="p-2 bg-gray-50 rounded text-sm dark:bg-gray-700 dark:text-white flex items-center">
+                  <span className="font-mono text-[10px] bg-gray-200 dark:bg-gray-600 px-1 rounded mr-2 text-gray-600 dark:text-gray-300">
+                    ID: {project.id || project.ObjectId}
+                  </span>
                   {project.name || project.Name}
                 </div>
               ))}
@@ -115,7 +173,32 @@ export const AssignProjectModal: React.FC<AssignProjectModalProps> = ({
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-2 dark:text-gray-300">Select Projects to Assign:</label>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-2">
+              <label className="text-sm font-medium dark:text-gray-300 whitespace-nowrap">Select Projects to Assign:</label>
+              
+              <div className="flex items-center gap-2">
+                <div className="relative w-40">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                  <Input 
+                    placeholder="Search..." 
+                    className="h-8 pl-8 text-xs outline-none focus-visible:ring-1"
+                    value={modalSearchTerm}
+                    onChange={(e) => setModalSearchTerm(e.target.value)}
+                  />
+                </div>
+                <Select value={modalYearFilter} onValueChange={setModalYearFilter}>
+                  <SelectTrigger className="w-[100px] h-8 text-xs">
+                    <SelectValue placeholder="FY Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Years</SelectItem>
+                    {availableYears.map(year => (
+                      <SelectItem key={year} value={year}>{year}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div className="max-h-64 overflow-y-auto border rounded p-2 dark:border-gray-700 dark:bg-gray-900">
               {loading ? (
                 <div className="flex items-center justify-center py-8">
@@ -123,26 +206,35 @@ export const AssignProjectModal: React.FC<AssignProjectModalProps> = ({
                   <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">Loading projects...</span>
                 </div>
               ) : availableProjects.length > 0 ? (
-                availableProjects.map((project: any) => (
-                  <div key={project.ObjectId} className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded dark:hover:bg-gray-700">
-                    <input
-                      type="checkbox"
-                      id={`project-${project.ObjectId}`}
-                      checked={selectedProjects.includes(project.ObjectId)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedProjects([...selectedProjects, project.ObjectId]);
-                        } else {
-                          setSelectedProjects(selectedProjects.filter(id => id !== project.ObjectId));
-                        }
-                      }}
-                      className="rounded dark:bg-gray-700 dark:border-gray-600"
-                    />
-                    <label htmlFor={`project-${project.ObjectId}`} className="flex-1 cursor-pointer dark:text-gray-300">
-                      {project.Name} {project.Location && `- ${project.Location}`}
-                    </label>
-                  </div>
-                ))
+                availableProjects.map((project: any) => {
+                  const pId = project.ObjectId || project.id;
+                  const pName = project.Name || project.name;
+                  const pLoc = project.Location || project.location;
+                  
+                  return (
+                    <div key={pId} className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded dark:hover:bg-gray-700">
+                      <input
+                        type="checkbox"
+                        id={`project-${pId}`}
+                        checked={selectedProjects.includes(pId)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedProjects([...selectedProjects, pId]);
+                          } else {
+                            setSelectedProjects(selectedProjects.filter(id => id !== pId));
+                          }
+                        }}
+                        className="rounded dark:bg-gray-700 dark:border-gray-600"
+                      />
+                      <label htmlFor={`project-${pId}`} className="flex-1 cursor-pointer dark:text-gray-300">
+                        <span className="font-mono text-[10px] bg-gray-100 dark:bg-gray-800 px-1 rounded mr-2 text-gray-500 border border-gray-200 dark:border-gray-700">
+                          ID: {pId}
+                        </span>
+                        {pName} {pLoc && `- ${pLoc}`}
+                      </label>
+                    </div>
+                  );
+                })
               ) : (
                 <p className="text-gray-500 text-sm dark:text-gray-400">No available projects</p>
               )}

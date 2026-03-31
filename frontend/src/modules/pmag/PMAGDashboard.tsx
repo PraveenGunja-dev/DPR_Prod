@@ -47,6 +47,8 @@ const PMAGDashboard = () => {
         isOpen: false, type: null, data: [], title: undefined
     });
 
+    const [expandedEntries, setExpandedEntries] = useState<Record<number, boolean>>({});
+
     const loadData = async () => {
         try {
             setLoading(true);
@@ -84,6 +86,21 @@ const PMAGDashboard = () => {
         } catch (e) { toast.error("Rejection failed"); }
     };
 
+    const handlePushToP6 = async (entry: any) => {
+        try {
+            toast.promise(pushEntryToP6(entry.id), {
+                loading: 'Pushing to P6...',
+                success: (data: any) => {
+                    loadData();
+                    return data.message || "Successfully pushed to P6";
+                },
+                error: (err: any) => `Push failed: ${err.message || 'Unknown error'}`
+            });
+        } catch (e) {
+            toast.error("Push process failed to start");
+        }
+    };
+
     return (
         <DashboardLayout userName={user?.name || user?.Name || "User"} userRole={user?.role || user?.Role || "PMAG"} projectName={projectName}>
             <PMAGDashboardSummary
@@ -92,8 +109,27 @@ const PMAGDashboard = () => {
                 onShowMembers={() => setDetailModalState({ isOpen: true, type: 'members', data: teamMembers, title: 'Team Members' })}
                 onShowApproved={() => setDetailModalState({ isOpen: true, type: 'approved', data: approvedEntries, title: 'Approved Sheets' })}
             />
-            <PMAGSheetEntries approvedEntries={approvedEntries} onFinalApprove={handleFinalApprove} onReject={handleReject} onRefresh={loadData} />
+            <PMAGSheetEntries 
+                approvedEntries={approvedEntries} 
+                onFinalApprove={handleFinalApprove} 
+                onReject={handleReject} 
+                onRefresh={loadData}
+                expandedEntries={expandedEntries}
+                setExpandedEntries={setExpandedEntries}
+                onPushToP6={handlePushToP6}
+                projects={projects}
+            />
             <PMAGChartsSection p6Activities={p6Activities} approvedEntries={approvedEntries} historyEntries={historyEntries} archivedEntries={archivedEntries} />
+            <PMAGDashboardDetailModal 
+                isOpen={detailModalState.isOpen} 
+                onClose={() => setDetailModalState(prev => ({ ...prev, isOpen: false }))} 
+                type={detailModalState.type} 
+                data={detailModalState.data} 
+                title={detailModalState.title}
+                onFinalApprove={handleFinalApprove}
+                onReject={handleReject}
+                onPushToP6={handlePushToP6}
+            />
         </DashboardLayout>
     );
 };

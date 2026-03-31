@@ -14,13 +14,44 @@ import {
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { StatusChip } from "./StatusChip";
+import { indianDateFormat } from "@/services/dprService";
 import "@/index.css";
+
+export interface StyledExcelTableProps {
+  title?: string;
+  columns?: any[];
+  data?: any[];
+  onDataChange?: (data: any[]) => void;
+  onSave?: () => void;
+  onSubmit?: () => void;
+  isReadOnly?: boolean;
+  hideAddRow?: boolean;
+  excludeColumns?: string[];
+  editableColumns?: string[];
+  columnTypes?: Record<string, any>;
+  columnWidths?: Record<string, number>;
+  columnTextColors?: Record<string, string>;
+  columnFontWeights?: Record<string, string>;
+  rowStyles?: Record<number, any>;
+  cellTextColors?: Record<number, Record<string, string>>;
+  headerStructure?: any[];
+  status?: string;
+  onExportAll?: () => void;
+  filters?: Record<string, string>;
+  totalRows?: number;
+  onFullscreenToggle?: (isFullscreen: boolean) => void;
+  onReachEnd?: () => void;
+  externalGlobalFilter?: string;
+  projectId?: string | number;
+  sheetType?: string;
+  disableAutoHeaderColors?: boolean;
+}
 
 export const StyledExcelTable = ({
   title,
   columns,
   data,
-  onDataChange,
+  onDataChange = () => {},
   onSave,
   onSubmit,
   isReadOnly = false,
@@ -43,7 +74,8 @@ export const StyledExcelTable = ({
   externalGlobalFilter = "", // Filter coming from parent
   projectId, // Project ID for saving column preferences
   sheetType, // Sheet type for saving column preferences
-}) => {
+  disableAutoHeaderColors = false // New prop to disable automatic header coloring
+}: StyledExcelTableProps) => {
   const safeData = Array.isArray(data) ? data : [];
   const safeColumns = Array.isArray(columns) ? columns : [];
   const safeExclude = Array.isArray(excludeColumns) ? excludeColumns : [];
@@ -185,7 +217,7 @@ export const StyledExcelTable = ({
     dark: {
       bg: "#1E1E1E",
       headerBg: "#2B2B2B",
-      headerText: "#E8E8E8",
+      headerText: "#FFFFFF",
       text: "#E8E8E8",
       grid: "#3A3A3A",
       activeBorder: "#2EA3F2",
@@ -219,15 +251,19 @@ export const StyledExcelTable = ({
 
   // Filter the data based on active filters, preserving the original data index
   const filteredDataWithIndices = useMemo(() => {
-    return (safeData || []).map((row, index) => ({ row, index })).filter(({ row }) => {
+    return (safeData || []).map((row, index) => ({ row, index })).filter(({ row, index }) => {
       if (!Array.isArray(row)) return false;
 
       // Apply Global Search ONLY to the first column (usually Activity ID)
+      // BUT preserve category/heading rows (they have empty Activity ID but should always show)
       if (externalGlobalFilter) {
-        const searchLower = externalGlobalFilter.toLowerCase();
-        const firstColValue = row[0]?.toString().toLowerCase() || "";
-        if (!firstColValue.includes(searchLower)) {
-          return false;
+        const isCategoryRow = rowStyles[index] && (rowStyles[index].isTotalRow || rowStyles[index].fontWeight === 'bold');
+        if (!isCategoryRow) {
+          const searchLower = externalGlobalFilter.toLowerCase();
+          const firstColValue = row[0]?.toString().toLowerCase() || "";
+          if (!firstColValue.includes(searchLower)) {
+            return false;
+          }
         }
       }
 
@@ -380,6 +416,8 @@ export const StyledExcelTable = ({
 
     // Apply abbreviations for common terms
     const abbreviations = {
+      // User requested full names, so we comment out or remove abbreviations
+      /*
       'Actual Start': 'A.S',
       'Actual Finish': 'A.F',
       'Base Plan Start': 'B.P.S',
@@ -397,6 +435,7 @@ export const StyledExcelTable = ({
       'Hold Due to WTG': 'Hold WTG',
       'New Block Nom': 'New Blk',
       'Baseline Priority': 'B.Priority'
+      */
     };
 
     // Apply abbreviations
@@ -412,9 +451,35 @@ export const StyledExcelTable = ({
   // EXCEL HEADER STYLE
   // ==========================================
   const excelHeaderStyle = (col, rowIndex = 0) => {
+    // Apply custom background colors based on column names for special columns
+    const colName = typeof col === 'string' ? col : (col.label || '');
+    const lowerColName = colName.toLowerCase();
+
     // Light backgrounds with black text for both themes
     let backgroundColor = "#f1f5f9"; // Light slate
     const textColor = "#000000"; // Black text
+    
+    // If auto-coloring is disabled, return default styles early
+    if (disableAutoHeaderColors) {
+      if (rowIndex === 1) backgroundColor = "#DDE4EC";
+      return {
+        backgroundColor,
+        color: textColor,
+        fontSize: isMobile ? "14px" : "13px",
+        fontWeight: "700",
+        padding: isMobile ? "10px 8px" : "8px 6px",
+        textAlign: "center" as const,
+        whiteSpace: "normal" as const,
+        wordBreak: "break-word" as const,
+        height: isMobile ? "54px" : (rowIndex === 1 ? "46px" : "55px"),
+        minHeight: isMobile ? "54px" : "55px",
+        minWidth: isMobile ? "100px" : (colWidths[colName] ? `${colWidths[colName]}px` : (columnWidths[colName] ? `${columnWidths[colName]}px` : "100px")),
+        width: isMobile ? "100px" : (colWidths[colName] ? `${colWidths[colName]}px` : (columnWidths[colName] ? `${columnWidths[colName]}px` : "100px")),
+        textTransform: "uppercase" as const,
+        borderBottom: "2px solid #94a3b8",
+        borderRight: "1px solid #cbd5e1",
+      };
+    }
 
     if (rowIndex === 1) {
       backgroundColor = "#c6daf5ff";
@@ -422,15 +487,12 @@ export const StyledExcelTable = ({
       backgroundColor = "#c9def8ff";
     }
 
-    // Apply custom background colors based on column names for special columns
-    const colName = typeof col === 'string' ? col : (col.label || '');
-    const lowerColName = colName.toLowerCase();
-
     // Get today's and yesterday's date in local timezone (YYYY-MM-DD format)
-    const todayLocal = new Date().toLocaleDateString('en-CA');
+    // Format date in Indian style (DD-MM-YYYY)
+    const todayLocal = indianDateFormat(new Date());
     const yesterdayDate = new Date();
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayLocal = yesterdayDate.toLocaleDateString('en-CA');
+    const yesterdayLocal = indianDateFormat(yesterdayDate);
 
     // COLOR SCHEME:
     // - Gray (default): P6 read-only data (not editable)
@@ -447,7 +509,7 @@ export const StyledExcelTable = ({
     }
     // Blue - User editable fields (Remarks and Today's date)
     else if (lowerColName.includes("remarks") || lowerColName.includes("today") ||
-      (colName.match(/^\d{4}-\d{2}-\d{2}$/) && colName === todayLocal)) {
+      (colName.match(/^\d{2}-\d{2}-\d{4}$/) && colName === todayLocal)) {
       backgroundColor = "#93c5fd"; // Light blue - User editable
     }
     // Red - Auto-calculated fields (not editable)
@@ -466,10 +528,12 @@ export const StyledExcelTable = ({
       fontWeight: "700",
       padding: isMobile ? "10px 8px" : "8px 6px",
       textAlign: "center" as const,
-      whiteSpace: "nowrap" as const,
+      whiteSpace: "normal" as const, // Allow wrapping for full names
+      wordBreak: "break-word" as const,
       overflow: "hidden" as const,
       textOverflow: "ellipsis" as const,
-      height: isMobile ? "44px" : (rowIndex === 1 ? "36px" : "40px"),
+      height: isMobile ? "54px" : (rowIndex === 1 ? "46px" : "55px"), // Increased height
+      minHeight: isMobile ? "54px" : "55px",
       minWidth: isMobile ? "100px" : (colWidths[colName] ? `${colWidths[colName]}px` : (columnWidths[colName] ? `${columnWidths[colName]}px` : "100px")),
       width: isMobile ? "100px" : (colWidths[colName] ? `${colWidths[colName]}px` : (columnWidths[colName] ? `${columnWidths[colName]}px` : "100px")),
       textTransform: "uppercase" as const,
@@ -509,17 +573,13 @@ export const StyledExcelTable = ({
       transition: "background 0.1s",
       color: editedCells[`${originalRowIdx}-${col}`]
         ? "#7c3aed" // Violet-600 for edited cells
-        : (cellTextColors[r] && cellTextColors[r][colName]) || columnTextColors[colName] || rowStyle.color || "#000000",
+        : (cellTextColors[r] && cellTextColors[r][colName]) || columnTextColors[colName] || rowStyle.color || (rowStyle.isCategoryRow ? "#000000" : T.text),
       textAlign,
       fontWeight: rowStyle.isCategoryRow ? "bold" : (editedCells[`${originalRowIdx}-${col}`] ? "bold" : "normal"),
       minWidth: isMobile ? "100px" : undefined,
       ...(isActive && {
         outline: `2px solid ${T.activeBorder}`,
         outlineOffset: "-2px",
-      }),
-      ...(rowStyle.isCategoryRow && {
-        backgroundColor: "#808080",
-        color: "#FFFFFF",
       }),
     };
   };
@@ -785,11 +845,17 @@ export const StyledExcelTable = ({
           }}>
             {/* Conditional rendering for header structure */}
             {headerStructure && headerStructure.length > 0 ? (
-              <>                {/* Render multi-row headers if headerStructure is provided */}
+              <>
+                {/* Render multi-row headers if headerStructure is provided */}
                 {headerStructure.map((headerRow, rowIndex) => {
                   const visibleHeaderCells = headerRow.filter((headerCell) => {
                     const label = typeof headerCell === 'string' ? headerCell : headerCell.label;
-                    return filteredColumns.includes(label);
+                    // If the label is explicitly in safeColumns, respect user's visibility preferences
+                    if (safeColumns.includes(label)) {
+                      return filteredColumns.includes(label);
+                    }
+                    // For group labels (Activity Details, Material Metrics, etc.), show them if colSpan/rowSpan > 1
+                    return (headerCell.colSpan || 1) > 1 || (headerCell.rowSpan || 1) > 1;
                   });
                   return (
                   <tr key={rowIndex}>
@@ -855,6 +921,7 @@ export const StyledExcelTable = ({
                             }),
                           }}
                           colSpan={headerCell.colSpan || 1}
+                          rowSpan={headerCell.rowSpan || 1}
                         >
                           <span>{cleanHeaderLabel(typeof headerCell === 'string' ? headerCell : headerCell.label)}</span>
                           {/* Resize Handle */}
@@ -1155,7 +1222,7 @@ export const StyledExcelTable = ({
                       onClick={() => setActiveCell({ row: r, col })}
                     >
                       <Input
-                        type={type}
+                        type={type === "date" ? "text" : type}
                         value={value || ""}
                         readOnly={isReadOnly || !editableColumns.includes(colName) || !!rowStyle.isTotalRow}
                         onKeyDown={(e) => {
@@ -1193,8 +1260,8 @@ export const StyledExcelTable = ({
                             {
                               background: "transparent",
                               fontSize: "inherit",
-                              color: columnTextColors[colName] || T.text,
-                              fontWeight: columnFontWeights[colName] || "normal",
+                              color: columnTextColors[colName] || (rowStyle.isCategoryRow ? "#000000" : T.text),
+                              fontWeight: columnFontWeights[colName] || (rowStyle.isCategoryRow ? "bold" : "normal"),
                               textAlign: "center",
                               padding: "0",
                               margin: "0",
@@ -1209,8 +1276,8 @@ export const StyledExcelTable = ({
                             {
                               background: "transparent",
                               fontSize: "inherit",
-                              color: columnTextColors[colName] || T.text,
-                              fontWeight: columnFontWeights[colName] || "normal",
+                              color: rowStyle.color || columnTextColors[colName] || (rowStyle.isCategoryRow ? "#000000" : T.text),
+                              fontWeight: columnFontWeights[colName] || (rowStyle.isCategoryRow ? "bold" : "normal"),
                               textAlign: "center", // Align text in input to match cell
                             }
                         }
@@ -1240,10 +1307,10 @@ export const StyledExcelTable = ({
             color: T.headerText,
           }}
         >
-          <div style={{ fontSize: "8px" }}>
+          {/* <div style={{ fontSize: "8px" }}>
             Ready | {filteredData.length} of {safeData.length} rows × {safeColumns.length} columns
           </div>
-          <div style={{ fontSize: "10px" }}>Excel Style Sheet</div>
+          <div style={{ fontSize: "10px" }}>Excel Style Sheet</div> */}
         </div>
       )}
     </div>

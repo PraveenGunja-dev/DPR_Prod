@@ -28,10 +28,13 @@ import { getAssignedProjects } from "@/services/projectService";
 import { 
     getP6ActivitiesPaginated,
     getP6ActivitiesForProject, 
-    mapActivitiesToDPQty, 
+    mapActivitiesToDPQty,
+    aggregateDPQtyByActivityName, 
     mapActivitiesToDPBlock, 
-    mapActivitiesToDPVendorBlock, 
-    mapActivitiesToManpowerDetails, 
+    mapActivitiesToDPVendorBlock,
+    aggregateVendorBlockByActivityName,
+    getManpowerDetailsData,
+    aggregateManpowerByActivityName,
     mapActivitiesToDPVendorIdt, 
     getYesterdayValues, 
     getResourcesForProject 
@@ -57,7 +60,7 @@ const DPRDashboard = () => {
     const projectName = locationState.projectName || "Project";
     const projectId = locationState.projectId || null;
     const projectDetails = locationState.projectDetails || null;
-    const initialActiveTab = locationState.activeTab || "dp-qty";
+    const initialActiveTab = (locationState.activeTab || "dp_qty").replace(/-/g, '_');
 
     const [activeTab, setActiveTab] = useState(initialActiveTab);
     const [assignedProjects, setAssignedProjects] = useState<Project[]>([]);
@@ -87,15 +90,15 @@ const DPRDashboard = () => {
             
             if (data.rows) {
                 switch (activeTab) {
-                    case 'dp-qty': setDpQtyData(data.rows); break;
-                    case 'dp-block': setDpBlockData(data.rows); break;
-                    case 'dp-vendor-block': setDpVendorBlockData(data.rows); break;
-                    case 'manpower-details': 
+                    case 'dp_qty': setDpQtyData(data.rows); break;
+                    case 'dp_block': setDpBlockData(data.rows); break;
+                    case 'dp_vendor_block': setDpVendorBlockData(data.rows); break;
+                    case 'manpower_details': 
                         setManpowerDetailsData(data.rows); 
                         if (data.totalManpower) setTotalManpower(data.totalManpower);
                         break;
-                    case 'dp-vendor-idt': setDpVendorIdtData(data.rows); break;
-                    case 'mms-module-rfi': setMmsModuleRfiData(data.rows); break;
+                    case 'dp_vendor_idt': setDpVendorIdtData(data.rows); break;
+                    case 'mms_module_rfi': setMmsModuleRfiData(data.rows); break;
                     case 'resource': setResourceData(data.rows); break;
                 }
             }
@@ -130,9 +133,10 @@ const DPRDashboard = () => {
             if (!projectId || !!currentDraftEntry) return;
 
             try {
-                const [activitiesResponse, yesterdayData] = await Promise.all([
+                const [activitiesResponse, yesterdayData, manpowerDataRaw] = await Promise.all([
                     getP6ActivitiesPaginated(Number(projectId), 1, 5000),
-                    getYesterdayValues(Number(projectId))
+                    getYesterdayValues(Number(projectId)),
+                    getManpowerDetailsData(Number(projectId))
                 ]);
                 
                 const activities = activitiesResponse.activities;
@@ -140,14 +144,19 @@ const DPRDashboard = () => {
                 // Mapper with yesterday merging logic
                 const mergeYesterday = (rows: any[], keyField: string) => rows.map(row => {
                     const yVal = yesterdayData.activities?.find((a: any) => a.activityId === row[keyField] || a.name === row[keyField]);
-                    return { ...row, yesterday: yVal?.yesterdayValue || '', cumulative: yVal?.cumulativeValue || '' };
+                    return { 
+                        ...row, 
+                        yesterday: yVal?.yesterdayValue || '', 
+                        yesterdayValue: yVal?.yesterdayValue || '',
+                        cumulative: yVal?.cumulativeValue || '' 
+                    };
                 });
 
-                setDpQtyData(mergeYesterday(mapActivitiesToDPQty(activities), 'activityId'));
+                setDpQtyData(aggregateDPQtyByActivityName(mergeYesterday(mapActivitiesToDPQty(activities), 'activityId')) as any);
                 setDpBlockData(mergeYesterday(mapActivitiesToDPBlock(activities), 'activityId'));
-                setDpVendorBlockData(mergeYesterday(mapActivitiesToDPVendorBlock(activities), 'activityId'));
-                setManpowerDetailsData(mapActivitiesToManpowerDetails(activities));
-                setDpVendorIdtData(mapActivitiesToDPVendorIdt(activities));
+                setDpVendorBlockData(aggregateVendorBlockByActivityName(mergeYesterday(mapActivitiesToDPVendorBlock(activities), 'activityId')) as any);
+                setManpowerDetailsData(aggregateManpowerByActivityName(mergeYesterday(manpowerDataRaw, 'activityId')) as any);
+                setDpVendorIdtData(mergeYesterday(mapActivitiesToDPVendorIdt(activities), 'activityId'));
                 
                 toast.success("Loaded values from P6 activities");
             } catch (e) {
@@ -165,27 +174,27 @@ const DPRDashboard = () => {
             
             // Use provided data or fall back to state
             const targetData = customData || (
-                currentTab === 'dp-qty' ? dpQtyData :
-                currentTab === 'dp-block' ? dpBlockData :
-                currentTab === 'dp-vendor-block' ? dpVendorBlockData :
-                currentTab === 'manpower-details' ? manpowerDetailsData :
+                currentTab === 'dp_qty' ? dpQtyData :
+                currentTab === 'dp_block' ? dpBlockData :
+                currentTab === 'dp_vendor_block' ? dpVendorBlockData :
+                currentTab === 'manpower_details' ? manpowerDetailsData :
                 currentTab === 'resource' ? resourceData :
-                currentTab === 'dp-vendor-idt' ? dpVendorIdtData :
-                currentTab === 'mms-module-rfi' ? mmsModuleRfiData : []
+                currentTab === 'dp_vendor_idt' ? dpVendorIdtData :
+                currentTab === 'mms_module_rfi' ? mmsModuleRfiData : []
             );
 
             switch (currentTab) {
-                case 'dp-qty': 
+                case 'dp_qty': 
                     dataToSave = { 
                         rows: targetData,
                         totals: calculateTotals(targetData, ['totalQuantity', 'balance', 'cumulative', 'yesterday', 'today'])
                     }; 
                     break;
-                case 'dp-block': dataToSave = { rows: targetData }; break;
-                case 'dp-vendor-block': dataToSave = { rows: targetData }; break;
-                case 'manpower-details': dataToSave = { rows: targetData, totalManpower }; break;
-                case 'dp-vendor-idt': dataToSave = { rows: targetData }; break;
-                case 'mms-module-rfi': dataToSave = { rows: targetData }; break;
+                case 'dp_block': dataToSave = { rows: targetData }; break;
+                case 'dp_vendor_block': dataToSave = { rows: targetData }; break;
+                case 'manpower_details': dataToSave = { rows: targetData, totalManpower }; break;
+                case 'dp_vendor_idt': dataToSave = { rows: targetData }; break;
+                case 'mms_module_rfi': dataToSave = { rows: targetData }; break;
                 case 'resource': dataToSave = { rows: targetData }; break;
             }
 
@@ -254,10 +263,10 @@ const DPRDashboard = () => {
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <TabsList className="flex flex-wrap h-auto bg-muted/50 p-1 mb-6">
-                        <TabsTrigger value="dp-qty" className="flex-1 min-w-[120px]"><FileSpreadsheet className="w-4 h-4 mr-2"/> DP Qty</TabsTrigger>
-                        <TabsTrigger value="dp-block" className="flex-1 min-w-[120px]"><Grid3X3 className="w-4 h-4 mr-2"/> DP Block</TabsTrigger>
-                        <TabsTrigger value="dp-vendor-block" className="flex-1 min-w-[120px]"><Wrench className="w-4 h-4 mr-2"/> Vendor Block</TabsTrigger>
-                        <TabsTrigger value="manpower-details" className="flex-1 min-w-[120px]"><User className="w-4 h-4 mr-2"/> Manpower</TabsTrigger>
+                        <TabsTrigger value="dp_qty" className="flex-1 min-w-[120px]"><FileSpreadsheet className="w-4 h-4 mr-2"/> DP Qty</TabsTrigger>
+                        <TabsTrigger value="dp_block" className="flex-1 min-w-[120px]"><Grid3X3 className="w-4 h-4 mr-2"/> DP Block</TabsTrigger>
+                        <TabsTrigger value="dp_vendor_block" className="flex-1 min-w-[120px]"><Wrench className="w-4 h-4 mr-2"/> Vendor Block</TabsTrigger>
+                        <TabsTrigger value="manpower_details" className="flex-1 min-w-[120px]"><User className="w-4 h-4 mr-2"/> Manpower</TabsTrigger>
                         <TabsTrigger value="resource" className="flex-1 min-w-[120px]"><Wrench className="w-4 h-4 mr-2"/> Resource</TabsTrigger>
                     </TabsList>
 
@@ -265,7 +274,7 @@ const DPRDashboard = () => {
                         <TabsContent key={activeTab} value={activeTab}>
                             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
                                 <Card className="p-4 overflow-hidden border-border bg-card shadow-sm">
-                                    {activeTab === 'dp-qty' && (
+                                    {activeTab === 'dp_qty' && (
                                         <DPQtyTable 
                                             data={dpQtyData} 
                                             setData={setDpQtyData} 
@@ -278,7 +287,7 @@ const DPRDashboard = () => {
                                             universalFilter={universalFilter}
                                         />
                                     )}
-                                    {activeTab === 'dp-block' && (
+                                    {activeTab === 'dp_block' && (
                                         <DPBlockTable 
                                             data={dpBlockData} 
                                             setData={setDpBlockData} 
@@ -290,7 +299,7 @@ const DPRDashboard = () => {
                                             universalFilter={universalFilter}
                                         />
                                     )}
-                                    {activeTab === 'dp-vendor-block' && (
+                                    {activeTab === 'dp_vendor_block' && (
                                         <DPVendorBlockTable 
                                             data={dpVendorBlockData} 
                                             setData={setDpVendorBlockData} 
@@ -302,7 +311,7 @@ const DPRDashboard = () => {
                                             universalFilter={universalFilter}
                                         />
                                     )}
-                                    {activeTab === 'manpower-details' && (
+                                    {activeTab === 'manpower_details' && (
                                         <ManpowerDetailsTable 
                                             data={manpowerDetailsData} 
                                             setData={setManpowerDetailsData} 

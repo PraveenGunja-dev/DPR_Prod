@@ -24,6 +24,12 @@ export interface P6Activity {
     forecastFinishDate: string | null;
     baselineStartDate: string | null;
     baselineFinishDate: string | null;
+    baseline1StartDate: string | null;
+    baseline1FinishDate: string | null;
+    baseline2StartDate: string | null;
+    baseline2FinishDate: string | null;
+    baseline3StartDate: string | null;
+    baseline3FinishDate: string | null;
 
     // From resourceAssignments - exact P6 names
     targetQty: number | null;
@@ -138,6 +144,12 @@ export const getP6ActivitiesPaginated = async (
             forecastFinishDate: formatDate(a.forecastFinishDate),
             baselineStartDate: formatDate(a.baselineStartDate),
             baselineFinishDate: formatDate(a.baselineFinishDate),
+            baseline1StartDate: formatDate(a.baseline1StartDate),
+            baseline1FinishDate: formatDate(a.baseline1FinishDate),
+            baseline2StartDate: formatDate(a.baseline2StartDate),
+            baseline2FinishDate: formatDate(a.baseline2FinishDate),
+            baseline3StartDate: formatDate(a.baseline3StartDate),
+            baseline3FinishDate: formatDate(a.baseline3FinishDate),
 
             // From resourceAssignments
             targetQty: parseNumber(a.targetQty),
@@ -150,7 +162,7 @@ export const getP6ActivitiesPaginated = async (
             percentComplete: parseNumber(a.percentComplete),
 
             // From resources
-            contractorName: a.contractorName || a.primaryResource || null,
+            contractorName: a.contractorName || null,
             unitOfMeasure: a.unitOfMeasure || null,
             resourceType: a.resourceType || null,
 
@@ -229,6 +241,14 @@ export const getDPQtyActivities = async (projectObjectId: number | string): Prom
             actualStartDate: a.actualStartDate,
             actualFinishDate: a.actualFinishDate,
             forecastFinishDate: a.forecastFinishDate,
+            baselineStartDate: a.baselineStartDate,
+            baselineFinishDate: a.baselineFinishDate,
+            baseline1StartDate: a.baseline1StartDate,
+            baseline1FinishDate: a.baseline1FinishDate,
+            baseline2StartDate: a.baseline2StartDate,
+            baseline2FinishDate: a.baseline2FinishDate,
+            baseline3StartDate: a.baseline3StartDate,
+            baseline3FinishDate: a.baseline3FinishDate,
             targetQty: a.targetQty,
             actualQty: a.actualQty,
             remainingQty: a.remainingQty,
@@ -301,10 +321,16 @@ export const mapActivitiesToDPQty = (activities: P6Activity[]) => {
         totalQuantity: a.targetQty !== null ? String(a.targetQty) : "", // Mapped from targetQty
         uom: a.unitOfMeasure || "", // Mapped from unitOfMeasure
         balance: a.balance || "", // From DB sync
-        basePlanStart: a.baselineStartDate ? a.baselineStartDate.split('T')[0] : (a.plannedStartDate ? a.plannedStartDate.split('T')[0] : ""),
-        basePlanFinish: a.baselineFinishDate ? a.baselineFinishDate.split('T')[0] : (a.plannedFinishDate ? a.plannedFinishDate.split('T')[0] : ""),
-        forecastStart: a.forecastStartDate ? a.forecastStartDate.split('T')[0] : (a.plannedStartDate ? a.plannedStartDate.split('T')[0] : ""),
-        forecastFinish: a.forecastFinishDate ? a.forecastFinishDate.split('T')[0] : (a.plannedFinishDate ? a.plannedFinishDate.split('T')[0] : ""),
+        basePlanStart: a.baselineStartDate ? a.baselineStartDate.split('T')[0] : "",
+        basePlanFinish: a.baselineFinishDate ? a.baselineFinishDate.split('T')[0] : "",
+        bl1Start: a.baseline1StartDate ? a.baseline1StartDate.split('T')[0] : "",
+        bl1Finish: a.baseline1FinishDate ? a.baseline1FinishDate.split('T')[0] : "",
+        bl2Start: a.baseline2StartDate ? a.baseline2StartDate.split('T')[0] : "",
+        bl2Finish: a.baseline2FinishDate ? a.baseline2FinishDate.split('T')[0] : "",
+        bl3Start: a.baseline3StartDate ? a.baseline3StartDate.split('T')[0] : "",
+        bl3Finish: a.baseline3FinishDate ? a.baseline3FinishDate.split('T')[0] : "",
+        forecastStart: a.forecastStartDate ? a.forecastStartDate.split('T')[0] : "",
+        forecastFinish: a.forecastFinishDate ? a.forecastFinishDate.split('T')[0] : "",
         actualStart: a.actualStartDate ? a.actualStartDate.split('T')[0] : "",
         actualFinish: a.actualFinishDate ? a.actualFinishDate.split('T')[0] : "",
         percentComplete: a.percentComplete !== null ? (a.percentComplete === 100 ? "100.00%" : (String(a.percentComplete.toFixed(2)) + "%")) : "",
@@ -312,10 +338,120 @@ export const mapActivitiesToDPQty = (activities: P6Activity[]) => {
         cumulative: a.cumulative || "",
         block: (a.block || a.newBlockNom || a.plot || "").toUpperCase(),
         weightage: a.weightage !== null && a.weightage !== undefined ? String(a.weightage) : "",
-        yesterday: a.yesterday || "",
+        yesterdayValue: a.yesterday || "",
         yesterdayIsApproved: a.yesterdayIsApproved,
-        today: a.today || ""
+        todayValue: a.today || ""
     }));
+};
+
+/**
+ * Strips block prefix from activity description.
+ * E.g. "Block-01 - Piling - MMS (Marking, Auguring & Concreting)" → "Piling - MMS (Marking, Auguring & Concreting)"
+ * Also handles "Block-01-Piling..." or "Block 01 - Piling..." patterns.
+ */
+export const extractActivityName = (description: string): string => {
+    if (!description) return "";
+    // Match patterns like "Block-01 - ", "Block-01-", "Block 01 - ", "Block-1 - " etc.
+    const blockPrefixRegex = /^Block[-\s]*\d+\s*[-–]\s*/i;
+    return description.replace(blockPrefixRegex, "").trim();
+};
+
+/**
+ * Helper to get the earliest (min) date string from an array of date strings.
+ */
+const minDate = (dates: string[]): string => {
+    const valid = dates.filter(d => d && d !== "");
+    if (valid.length === 0) return "";
+    return valid.sort()[0]; // ISO date strings sort lexicographically
+};
+
+/**
+ * Helper to get the latest (max) date string from an array of date strings.
+ */
+const maxDate = (dates: string[]): string => {
+    const valid = dates.filter(d => d && d !== "");
+    if (valid.length === 0) return "";
+    return valid.sort().reverse()[0];
+};
+
+/**
+ * Aggregates DP Qty rows by activity name (stripping block prefix).
+ * Groups activities like "Block-01 - Piling..." and "Block-02 - Piling..." into a single row "Piling...".
+ * 
+ * Returns the SAME shape as mapActivitiesToDPQty so the original DPQtyTable works unchanged.
+ * 
+ * Aggregation rules:
+ * - UOM: from first activity (same for all blocks)
+ * - Scope (totalQuantity): SUM
+ * - Completed (cumulative): SUM
+ * - Balance: Scope - Completed
+ * - Weightage: SUM
+ * - Baseline Start: MIN date
+ * - Baseline Finish: MAX date
+ * - Forecast Start: MIN date
+ * - Forecast Finish: MAX date
+ * - Actual Start: MIN date
+ * - Actual Finish: MAX date
+ * - Yesterday: SUM
+ * - Today: SUM
+ */
+export const aggregateDPQtyByActivityName = (rows: ReturnType<typeof mapActivitiesToDPQty>): ReturnType<typeof mapActivitiesToDPQty> => {
+    if (!rows || rows.length === 0) return rows;
+
+    // Group by cleaned activity name
+    const groupMap = new Map<string, typeof rows>();
+    
+    rows.forEach(row => {
+        const cleanName = extractActivityName(row.description);
+        if (!groupMap.has(cleanName)) {
+            groupMap.set(cleanName, []);
+        }
+        groupMap.get(cleanName)!.push(row);
+    });
+
+    // Aggregate each group - return same shape as mapActivitiesToDPQty
+    const result: ReturnType<typeof mapActivitiesToDPQty> = [];
+    let slNo = 1;
+    
+    groupMap.forEach((groupRows, cleanName) => {
+        const totalQty = groupRows.reduce((sum, r) => sum + (Number(r.totalQuantity) || 0), 0);
+        const totalCumulative = groupRows.reduce((sum, r) => sum + (Number(r.cumulative) || 0), 0);
+        const totalWeightage = groupRows.reduce((sum, r) => sum + (Number(r.weightage) || 0), 0);
+        const totalYesterday = groupRows.reduce((sum, r) => sum + (Number(r.yesterdayValue) || 0), 0);
+        const totalToday = groupRows.reduce((sum, r) => sum + (Number(r.todayValue) || 0), 0);
+        const balance = totalQty - totalCumulative;
+
+        result.push({
+            activityId: groupRows[0].activityId,  // use first activity's ID for merge compatibility
+            slNo: String(slNo++),
+            description: cleanName,
+            totalQuantity: totalQty ? String(totalQty) : "",
+            uom: groupRows[0].uom || "",
+            balance: String(balance),
+            basePlanStart: minDate(groupRows.map(r => r.basePlanStart)),
+            basePlanFinish: maxDate(groupRows.map(r => r.basePlanFinish)),
+            bl1Start: minDate(groupRows.map(r => r.bl1Start)),
+            bl1Finish: maxDate(groupRows.map(r => r.bl1Finish)),
+            bl2Start: minDate(groupRows.map(r => r.bl2Start)),
+            bl2Finish: maxDate(groupRows.map(r => r.bl2Finish)),
+            bl3Start: minDate(groupRows.map(r => r.bl3Start)),
+            bl3Finish: maxDate(groupRows.map(r => r.bl3Finish)),
+            forecastStart: minDate(groupRows.map(r => r.forecastStart)),
+            forecastFinish: maxDate(groupRows.map(r => r.forecastFinish)),
+            actualStart: minDate(groupRows.map(r => r.actualStart)),
+            actualFinish: maxDate(groupRows.map(r => r.actualFinish)),
+            percentComplete: "",
+            remarks: groupRows.map(r => r.remarks).filter(r => r).join("; "),
+            cumulative: totalCumulative ? String(totalCumulative) : "",
+            block: "",  // grouped across blocks
+            weightage: totalWeightage ? String(totalWeightage) : "",
+            yesterdayValue: totalYesterday ? String(totalYesterday) : "",
+            yesterdayIsApproved: groupRows.every(r => r.yesterdayIsApproved !== false),
+            todayValue: totalToday ? String(totalToday) : "",
+        });
+    });
+
+    return result;
 };
 
 export const mapActivitiesToDPBlock = (activities: P6Activity[]) => {
@@ -336,6 +472,12 @@ export const mapActivitiesToDPBlock = (activities: P6Activity[]) => {
         // Date mapping - use baseline/forecast from P6 sync, fallback to planned
         baselineStartDate: a.baselineStartDate ? a.baselineStartDate.split('T')[0] : (a.plannedStartDate ? a.plannedStartDate.split('T')[0] : ""),
         baselineEndDate: a.baselineFinishDate ? a.baselineFinishDate.split('T')[0] : (a.plannedFinishDate ? a.plannedFinishDate.split('T')[0] : ""),
+        bl1Start: a.baseline1StartDate ? a.baseline1StartDate.split('T')[0] : "",
+        bl1Finish: a.baseline1FinishDate ? a.baseline1FinishDate.split('T')[0] : "",
+        bl2Start: a.baseline2StartDate ? a.baseline2StartDate.split('T')[0] : "",
+        bl2Finish: a.baseline2FinishDate ? a.baseline2FinishDate.split('T')[0] : "",
+        bl3Start: a.baseline3StartDate ? a.baseline3StartDate.split('T')[0] : "",
+        bl3Finish: a.baseline3FinishDate ? a.baseline3FinishDate.split('T')[0] : "",
         actualStartDate: a.actualStartDate ? a.actualStartDate.split('T')[0] : "",
         actualFinishDate: a.actualFinishDate ? a.actualFinishDate.split('T')[0] : "",
         forecastStartDate: a.forecastStartDate ? a.forecastStartDate.split('T')[0] : (a.plannedStartDate ? a.plannedStartDate.split('T')[0] : ""),
@@ -345,63 +487,279 @@ export const mapActivitiesToDPBlock = (activities: P6Activity[]) => {
 };
 
 export const mapActivitiesToDPVendorBlock = (activities: P6Activity[]) => {
-    return activities.map((a) => ({
-        activityId: a.activityId || "",
-        activities: a.name || "", // Mapped from name
-        plot: a.plot || "",
-        block: (a.block || a.newBlockNom || a.plot || "").toUpperCase(),
-        newBlockNom: a.newBlockNom || "",
-        priority: a.priority || "",
-        baselinePriority: a.priority || "", // Default to priority if baseline not available
-        contractorName: a.contractorName || "",
-        scope: a.scope || "",
-        holdDueToWtg: a.holdDueToWTG || "", // Case fix
-        front: a.front || "",
-        actual: a.cumulative || "", // Use cumulative for Actual units as requested
-        completionPercentage: a.percentComplete !== null ? (a.percentComplete === 100 ? "100.00%" : (String(a.percentComplete.toFixed(2)) + "%")) : "",
-        remarks: a.remarks || "",
-        yesterdayValue: a.yesterday || "",
-        yesterdayIsApproved: a.yesterdayIsApproved,
-        todayValue: a.today || ""
-    }));
-};
+    return activities.map((a) => {
+        const scope = Number(a.targetQty || a.scope || 0);
+        const actual = Number(a.actualQty || a.cumulative || 0);
+        const balance = scope - actual;
 
-export const mapActivitiesToManpowerDetails = (activities: P6Activity[]) => {
-    return activities
-        .filter(a => a.resourceType === 'Labor' || a.resourceType === 'Nonlabor') // Include relevant resources
-        .map((a, index) => ({
-            slNo: String(index + 1),
+        return {
             activityId: a.activityId || "",
+            description: a.name || "", // Standardized name
+            plot: a.plot || "",
             block: (a.block || a.newBlockNom || a.plot || "").toUpperCase(),
+            newBlockNom: a.newBlockNom || "",
+            priority: a.priority || "",
+            baselinePriority: a.priority || "", // Default to priority if baseline not available
             contractorName: a.contractorName || "",
-            activity: a.name || "", // Mapped from name
-            section: "", // Not directly in P6 activity, maybe UDF?
+            uom: a.unitOfMeasure || "",
+            scope: scope ? String(scope) : "",
+            holdDueToWtg: a.holdDueToWTG || "", // Case fix
+            front: a.front || "",
+            actual: actual ? String(actual) : "",
+            balance: String(balance),
+            completionPercentage: a.percentComplete !== null ? (a.percentComplete === 100 ? "100.00%" : (String(a.percentComplete.toFixed(2)) + "%")) : "",
+            remarks: a.remarks || "",
+            basePlanStart: a.baselineStartDate ? a.baselineStartDate.split('T')[0] : "",
+            basePlanFinish: a.baselineFinishDate ? a.baselineFinishDate.split('T')[0] : "",
+            bl1Start: a.baseline1StartDate ? a.baseline1StartDate.split('T')[0] : "",
+            bl1Finish: a.baseline1FinishDate ? a.baseline1FinishDate.split('T')[0] : "",
+            bl2Start: a.baseline2StartDate ? a.baseline2StartDate.split('T')[0] : "",
+            bl2Finish: a.baseline2FinishDate ? a.baseline2FinishDate.split('T')[0] : "",
+            bl3Start: a.baseline3StartDate ? a.baseline3StartDate.split('T')[0] : "",
+            bl3Finish: a.baseline3FinishDate ? a.baseline3FinishDate.split('T')[0] : "",
+            forecastStart: a.forecastStartDate ? a.forecastStartDate.split('T')[0] : "",
+            forecastFinish: a.forecastFinishDate ? a.forecastFinishDate.split('T')[0] : "",
+            actualStart: a.actualStartDate ? a.actualStartDate.split('T')[0] : "",
+            actualFinish: a.actualFinishDate ? a.actualFinishDate.split('T')[0] : "",
             yesterdayValue: a.yesterday || "",
             yesterdayIsApproved: a.yesterdayIsApproved,
             todayValue: a.today || ""
-        }));
+        };
+    });
+};
+
+export const getManpowerDetailsData = async (projectObjectId: number | string): Promise<any[]> => {
+    try {
+        const response = await apiClient.get<any>(`/oracle-p6/manpower-details-data?projectId=${projectObjectId}`);
+        return response.data.data;
+    } catch (error) {
+        console.error('Error fetching manpower details:', error);
+        return [];
+    }
+};
+
+/**
+ * Groups Manpower rows by activity name (stripping block prefix)
+ * and inserts a summary heading row (#FADFAD) for each group.
+ * Same pattern as aggregateVendorIdtByActivityName.
+ */
+export const aggregateManpowerByActivityName = (rows: any[]) => {
+    if (!rows || rows.length === 0) return rows;
+
+    // Group by cleaned activity name
+    const groupMap = new Map<string, any[]>();
+    rows.forEach(row => {
+        const cleanName = extractActivityName(row.description || row.activity || '');
+        if (!groupMap.has(cleanName)) {
+            groupMap.set(cleanName, []);
+        }
+        groupMap.get(cleanName)!.push(row);
+    });
+
+    const result: any[] = [];
+    groupMap.forEach((groupRows, cleanName) => {
+        // Create Category Heading Row with sums — same fields as Vendor IDT
+        const totalBudgeted = groupRows.reduce((sum, r) => sum + (Number(r.budgetedUnits) || 0), 0);
+        const totalActual = groupRows.reduce((sum, r) => sum + (Number(r.actualUnits) || 0), 0);
+        const totalRemaining = groupRows.reduce((sum, r) => sum + (Number(r.remainingUnits) || 0), 0);
+        const totalYesterday = groupRows.reduce((sum, r) => sum + (Number(r.yesterdayValue) || 0), 0);
+        const totalToday = groupRows.reduce((sum, r) => sum + (Number(r.todayValue) || 0), 0);
+        const pctComplete = totalBudgeted > 0 ? ((totalActual / totalBudgeted) * 100).toFixed(2) + '%' : '0.00%';
+
+        result.push({
+            isCategoryRow: true,
+            activityId: '',
+            description: cleanName,
+            category: cleanName,
+            block: '',
+            budgetedUnits: String(totalBudgeted),
+            actualUnits: String(totalActual),
+            remainingUnits: String(totalRemaining),
+            percentComplete: pctComplete,
+            yesterdayValue: String(totalYesterday),
+            todayValue: String(totalToday),
+            yesterdayIsApproved: groupRows.every(r => r.yesterdayIsApproved !== false)
+        });
+
+        // Add matching activities below the heading
+        result.push(...groupRows);
+    });
+
+    return result;
 };
 
 export const mapActivitiesToDPVendorIdt = (activities: P6Activity[]) => {
-    return activities.map((a) => ({
-        activityId: a.activityId || "",
-        activities: a.name || "", // Mapped from name
-        plot: a.plot || "",
-        block: (a.block || a.newBlockNom || a.plot || "").toUpperCase(),
-        newBlockNom: a.newBlockNom || "",
-        baselinePriority: a.priority || "",
-        scope: a.scope || "",
-        front: a.front || "",
-        priority: a.priority || "",
-        contractorName: a.contractorName || "",
-        remarks: a.remarks || "",
-        holdDueToWtg: a.holdDueToWTG || "", // Case fix
-        actual: a.cumulative || "", // Use cumulative for Actual units as requested
-        completionPercentage: a.percentComplete !== null ? (a.percentComplete === 100 ? "100.00%" : (String(a.percentComplete.toFixed(2)) + "%")) : "",
-        yesterdayValue: a.yesterday || "",
-        yesterdayIsApproved: a.yesterdayIsApproved,
-        todayValue: a.today || ""
-    }));
+    return activities.map((a) => {
+        const scope = Number(a.targetQty || a.scope || 0);
+        const actual = Number(a.actualQty || a.cumulative || 0);
+        const balance = scope - actual;
+
+        return {
+            activityId: a.activityId || "",
+            description: a.name || "", // Standardized name
+            plot: a.plot || "",
+            block: (a.block || a.newBlockNom || a.plot || "").toUpperCase(),
+            newBlockNom: a.newBlockNom || "",
+            baselinePriority: a.priority || "",
+            scope: scope ? String(scope) : "",
+            uom: a.unitOfMeasure || "",
+            front: a.front || "",
+            priority: a.priority || "",
+            contractorName: a.contractorName || "",
+            remarks: a.remarks || "",
+            holdDueToWtg: a.holdDueToWTG || "",
+            actual: actual ? String(actual) : "",
+            balance: String(balance),
+            basePlanStart: a.baselineStartDate ? a.baselineStartDate.split('T')[0] : "",
+            basePlanFinish: a.baselineFinishDate ? a.baselineFinishDate.split('T')[0] : "",
+            bl1Start: a.baseline1StartDate ? a.baseline1StartDate.split('T')[0] : "",
+            bl1Finish: a.baseline1FinishDate ? a.baseline1FinishDate.split('T')[0] : "",
+            bl2Start: a.baseline2StartDate ? a.baseline2StartDate.split('T')[0] : "",
+            bl2Finish: a.baseline2FinishDate ? a.baseline2FinishDate.split('T')[0] : "",
+            bl3Start: a.baseline3StartDate ? a.baseline3StartDate.split('T')[0] : "",
+            bl3Finish: a.baseline3FinishDate ? a.baseline3FinishDate.split('T')[0] : "",
+            forecastStart: a.forecastStartDate ? a.forecastStartDate.split('T')[0] : "",
+            forecastFinish: a.forecastFinishDate ? a.forecastFinishDate.split('T')[0] : "",
+            actualStart: a.actualStartDate ? a.actualStartDate.split('T')[0] : "",
+            actualFinish: a.actualFinishDate ? a.actualFinishDate.split('T')[0] : "",
+            completionPercentage: a.percentComplete !== null ? (a.percentComplete === 100 ? "100.00%" : (String(a.percentComplete.toFixed(2)) + "%")) : "",
+            yesterdayValue: a.yesterday || "",
+            yesterdayIsApproved: a.yesterdayIsApproved,
+            todayValue: a.today || ""
+        };
+    });
+};
+
+/**
+ * Groups Vendor IDT rows by activity name (stripping block prefix)
+ * and inserts a summary heading row (#FADFAD) for each group.
+ */
+export const aggregateVendorIdtByActivityName = (rows: ReturnType<typeof mapActivitiesToDPVendorIdt>) => {
+    if (!rows || rows.length === 0) return rows;
+
+    // Group by cleaned activity name
+    const groupMap = new Map<string, typeof rows>();
+    rows.forEach(row => {
+        const cleanName = extractActivityName(row.description || '');
+        if (!groupMap.has(cleanName)) {
+            groupMap.set(cleanName, []);
+        }
+        groupMap.get(cleanName)!.push(row);
+    });
+
+    const result: any[] = [];
+    groupMap.forEach((groupRows, cleanName) => {
+        // Create Category Heading Row with sums
+        const totalScope = groupRows.reduce((sum, r) => sum + (Number(r.scope) || 0), 0);
+        const totalActual = groupRows.reduce((sum, r) => sum + (Number(r.actual) || 0), 0);
+        const totalYesterday = groupRows.reduce((sum, r) => sum + (Number(r.yesterdayValue) || 0), 0);
+        const totalToday = groupRows.reduce((sum, r) => sum + (Number(r.todayValue) || 0), 0);
+        const balance = totalScope - totalActual;
+
+        result.push({
+            isCategoryRow: true,
+            activityId: "", // Heading row has no activity ID
+            description: cleanName,
+            category: cleanName,
+            block: "",
+            priority: "",
+            contractorName: "",
+            uom: groupRows[0].uom || "",
+            scope: String(totalScope),
+            actual: String(totalActual),
+            balance: String(balance),
+            basePlanStart: minDate(groupRows.map(r => r.basePlanStart)),
+            basePlanFinish: maxDate(groupRows.map(r => r.basePlanFinish)),
+            bl1Start: minDate(groupRows.map(r => r.bl1Start)),
+            bl1Finish: maxDate(groupRows.map(r => r.bl1Finish)),
+            bl2Start: minDate(groupRows.map(r => r.bl2Start)),
+            bl2Finish: maxDate(groupRows.map(r => r.bl2Finish)),
+            bl3Start: minDate(groupRows.map(r => r.bl3Start)),
+            bl3Finish: maxDate(groupRows.map(r => r.bl3Finish)),
+            forecastStart: minDate(groupRows.map(r => r.forecastStart)),
+            forecastFinish: maxDate(groupRows.map(r => r.forecastFinish)),
+            actualStart: minDate(groupRows.map(r => r.actualStart)),
+            actualFinish: maxDate(groupRows.map(r => r.actualFinish)),
+            yesterdayValue: String(totalYesterday),
+            todayValue: String(totalToday),
+            yesterdayIsApproved: groupRows.every(r => r.yesterdayIsApproved !== false)
+        });
+
+        // Add matching activities below the heading
+        result.push(...groupRows);
+    });
+
+    return result;
+};
+
+/**
+ * Groups Vendor Block rows by activity name (stripping block prefix)
+ * and inserts a summary heading row (#FADFAD) for each group.
+ * Same pattern as aggregateVendorIdtByActivityName.
+ */
+export const aggregateVendorBlockByActivityName = (rows: ReturnType<typeof mapActivitiesToDPVendorBlock>) => {
+    if (!rows || rows.length === 0) return rows;
+
+    // Group by cleaned activity name
+    const groupMap = new Map<string, typeof rows>();
+    rows.forEach(row => {
+        const cleanName = extractActivityName(row.description || '');
+        if (!groupMap.has(cleanName)) {
+            groupMap.set(cleanName, []);
+        }
+        groupMap.get(cleanName)!.push(row);
+    });
+
+    const result: any[] = [];
+    groupMap.forEach((groupRows, cleanName) => {
+        // Create Category Heading Row with sums
+        const totalScope = groupRows.reduce((sum, r) => sum + (Number(r.scope) || 0), 0);
+        const totalActual = groupRows.reduce((sum, r) => sum + (Number(r.actual) || 0), 0);
+        const totalYesterday = groupRows.reduce((sum, r) => sum + (Number(r.yesterdayValue) || 0), 0);
+        const totalToday = groupRows.reduce((sum, r) => sum + (Number(r.todayValue) || 0), 0);
+        const balance = totalScope - totalActual;
+
+        result.push({
+            isCategoryRow: true,
+            activityId: "", // Heading row has no activity ID
+            description: cleanName,
+            category: cleanName,
+            plot: "",
+            block: "",
+            newBlockNom: "",
+            priority: "",
+            baselinePriority: "",
+            contractorName: "",
+            uom: groupRows[0].uom || "",
+            scope: String(totalScope),
+            holdDueToWtg: "",
+            front: "",
+            actual: String(totalActual),
+            balance: String(balance),
+            completionPercentage: "",
+            remarks: "",
+            basePlanStart: minDate(groupRows.map(r => r.basePlanStart)),
+            basePlanFinish: maxDate(groupRows.map(r => r.basePlanFinish)),
+            bl1Start: minDate(groupRows.map(r => r.bl1Start)),
+            bl1Finish: maxDate(groupRows.map(r => r.bl1Finish)),
+            bl2Start: minDate(groupRows.map(r => r.bl2Start)),
+            bl2Finish: maxDate(groupRows.map(r => r.bl2Finish)),
+            bl3Start: minDate(groupRows.map(r => r.bl3Start)),
+            bl3Finish: maxDate(groupRows.map(r => r.bl3Finish)),
+            forecastStart: minDate(groupRows.map(r => r.forecastStart)),
+            forecastFinish: maxDate(groupRows.map(r => r.forecastFinish)),
+            actualStart: minDate(groupRows.map(r => r.actualStart)),
+            actualFinish: maxDate(groupRows.map(r => r.actualFinish)),
+            yesterdayValue: String(totalYesterday),
+            todayValue: String(totalToday),
+            yesterdayIsApproved: groupRows.every(r => r.yesterdayIsApproved !== false)
+        });
+
+        // Add matching activities below the heading
+        result.push(...groupRows);
+    });
+
+    return result;
 };
 
 export const mapResourcesToTable = (resources: P6Resource[]) => {

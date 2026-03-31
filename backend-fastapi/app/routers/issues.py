@@ -138,7 +138,7 @@ async def get_issue(
     return {"success": True, "issue": dict(row)}
 
 
-@router.post("/", status_code=201)
+@router.post("", status_code=201)
 async def create_issue(
     body: dict[str, Any],
     pool: PoolWrapper = Depends(get_db),

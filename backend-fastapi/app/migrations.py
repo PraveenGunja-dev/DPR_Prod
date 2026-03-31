@@ -17,13 +17,153 @@ async def run_migrations():
     pool = await get_pool()
 
     async def _exec(sql: str):
-        """Execute a migration query, ignoring errors."""
+        """Execute a migration query, logging real errors but ignoring 'already exists'."""
         try:
             await pool.execute(sql)
-        except Exception:
-            pass  # Non-fatal migration errors
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "already exists" in err_msg or "already a column" in err_msg or "duplicate" in err_msg:
+                return
+            logger.warning(f"Migration Query failed: {sql[:100]}... Error: {e}")
 
     try:
+        # --- Base Tables (from legacy schema.sql) ---
+        await _exec("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                email VARCHAR(100) UNIQUE NOT NULL,
+                password VARCHAR(255),
+                role VARCHAR(50) NOT NULL,
+                is_active BOOLEAN DEFAULT true,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        await _exec("""
+            CREATE TABLE IF NOT EXISTS projects (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                location VARCHAR(255),
+                status VARCHAR(50) DEFAULT 'planning',
+                progress INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        await _exec("""
+            CREATE TABLE IF NOT EXISTS project_assignments (
+                id SERIAL PRIMARY KEY,
+                project_id BIGINT NOT NULL,
+                user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                assigned_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+                UNIQUE(project_id, user_id)
+            )
+        """)
+
+        await _exec("""
+            CREATE TABLE IF NOT EXISTS dpr_sheets (
+                id SERIAL PRIMARY KEY,
+                project_id BIGINT NOT NULL,
+                supervisor_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                sheet_type VARCHAR(50) NOT NULL,
+                submission_date DATE NOT NULL,
+                yesterday_date DATE NOT NULL,
+                today_date DATE NOT NULL,
+                sheet_data JSONB NOT NULL,
+                status VARCHAR(20) DEFAULT 'draft',
+                is_locked BOOLEAN DEFAULT FALSE,
+                submitted_at TIMESTAMP,
+                pm_reviewed_at TIMESTAMP,
+                pm_reviewed_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+                pmag_reviewed_at TIMESTAMP,
+                pmag_reviewed_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        await _exec("""
+            CREATE TABLE IF NOT EXISTS dpr_comments (
+                id SERIAL PRIMARY KEY,
+                sheet_id INTEGER NOT NULL REFERENCES dpr_sheets(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                user_role VARCHAR(20) NOT NULL,
+                comment_text TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        await _exec("""
+            CREATE TABLE IF NOT EXISTS dpr_sheet_history (
+                id SERIAL PRIMARY KEY,
+                sheet_id INTEGER NOT NULL REFERENCES dpr_sheets(id) ON DELETE CASCADE,
+                action VARCHAR(50) NOT NULL,
+                performed_by INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                old_status VARCHAR(20),
+                new_status VARCHAR(20),
+                comments TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        await _exec("""
+            CREATE TABLE IF NOT EXISTS dpr_supervisor_entries (
+                id SERIAL PRIMARY KEY,
+                supervisor_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                project_id BIGINT NOT NULL,
+                sheet_type VARCHAR(50) NOT NULL,
+                entry_date DATE NOT NULL,
+                previous_date DATE NOT NULL,
+                data_json JSONB NOT NULL,
+                status VARCHAR(20) DEFAULT 'draft',
+                submitted_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        await _exec("""
+            CREATE TABLE IF NOT EXISTS system_logs (
+                id SERIAL PRIMARY KEY,
+                action_type VARCHAR(50) NOT NULL,
+                performed_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+                target_entity VARCHAR(255),
+                remarks TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        await _exec("""
+            CREATE TABLE IF NOT EXISTS p6_projects (
+                "ObjectId" BIGINT PRIMARY KEY,
+                "Id" VARCHAR(100),
+                "Name" VARCHAR(255),
+                "Description" TEXT,
+                "PlannedStartDate" TIMESTAMPTZ,
+                "PlannedFinishDate" TIMESTAMPTZ,
+                "DataDate" TIMESTAMPTZ,
+                last_sync_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+
+        # Seed initial admin if zero users
+        user_count = await pool.fetchval("SELECT count(*) FROM users")
+        if user_count == 0:
+            from app.auth.password import hash_password
+            admin_email = "superadmin.adani@adani.com"
+            hashed = hash_password("admin123")
+            await pool.execute(
+                "INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4)",
+                "Super Admin", admin_email, hashed, "Super Admin"
+            )
+            logger.info("OK Initialized database with default Super Admin")
+
+        # --- Evolution Migrations (Existing) ---
+
         # Drop FK constraints to support P6 projects
         await _exec("ALTER TABLE dpr_supervisor_entries DROP CONSTRAINT IF EXISTS dpr_supervisor_entries_project_id_fkey")
         await _exec("ALTER TABLE project_assignments DROP CONSTRAINT IF EXISTS project_assignments_project_id_fkey")
@@ -41,6 +181,7 @@ async def run_migrations():
         await _exec('ALTER TABLE p6_projects ADD COLUMN IF NOT EXISTS "PlannedStartDate" TIMESTAMP WITH TIME ZONE')
         await _exec('ALTER TABLE p6_projects ADD COLUMN IF NOT EXISTS "PlannedFinishDate" TIMESTAMP WITH TIME ZONE')
         await _exec('ALTER TABLE p6_projects ADD COLUMN IF NOT EXISTS "DataDate" TIMESTAMP WITH TIME ZONE')
+        await _exec("ALTER TABLE p6_projects ADD COLUMN IF NOT EXISTS project_type VARCHAR(50) DEFAULT 'solar'")
 
         # BIGINT conversions for P6 tables
         bigint_queries = [
@@ -71,6 +212,23 @@ async def run_migrations():
         await _exec("ALTER TABLE dpr_supervisor_entries ADD COLUMN IF NOT EXISTS pushed_at TIMESTAMP")
         await _exec("ALTER TABLE dpr_supervisor_entries ADD COLUMN IF NOT EXISTS pushed_by INTEGER REFERENCES users(user_id)")
 
+        # Push Audit table
+        await _exec("""
+            CREATE TABLE IF NOT EXISTS push_audit (
+                id SERIAL PRIMARY KEY,
+                entry_id INTEGER REFERENCES dpr_supervisor_entries(id) ON DELETE CASCADE,
+                activity_object_id BIGINT,
+                ra_object_id BIGINT,
+                field_name VARCHAR(100),
+                old_value TEXT,
+                new_value TEXT,
+                push_status VARCHAR(20),
+                error_message TEXT,
+                pushed_at TIMESTAMPTZ DEFAULT NOW(),
+                pushed_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL
+            )
+        """)
+
         # Cell comments table
         await _exec("""
             CREATE TABLE IF NOT EXISTS cell_comments (
@@ -91,86 +249,6 @@ async def run_migrations():
         await _exec("CREATE INDEX IF NOT EXISTS idx_cell_comments_sheet ON cell_comments(sheet_id)")
         await _exec("CREATE INDEX IF NOT EXISTS idx_cell_comments_parent ON cell_comments(parent_comment_id)")
 
-        # P6 UDF columns and Activity Codes on p6_activities (legacy)
-        for col, dtype in [("total_quantity", "DECIMAL(15,4)"), ("uom", "VARCHAR(50)"), ("block_capacity", "DECIMAL(15,4)"), ("phase", "VARCHAR(255)"), ("spv_no", "VARCHAR(100)"), ("scope", "TEXT"), ("hold", "VARCHAR(100)"), ("front", "VARCHAR(255)"), ("priority", "VARCHAR(255)"), ("plot", "VARCHAR(255)"), ("new_block_nom", "VARCHAR(255)")]:
-            await _exec(f'ALTER TABLE p6_activities ADD COLUMN IF NOT EXISTS {col} {dtype}')
-
-        # ─── Solar-specific tables (type-specific, snake_case) ───
-        await _exec("""
-            CREATE TABLE IF NOT EXISTS solar_activities (
-                object_id           BIGINT PRIMARY KEY,
-                activity_id         VARCHAR(50),
-                name                VARCHAR(500),
-                status              VARCHAR(50),
-                activity_type       VARCHAR(50),
-                project_object_id   BIGINT,
-                wbs_object_id       BIGINT,
-                wbs_name            VARCHAR(255),
-                planned_start       TIMESTAMPTZ,
-                planned_finish      TIMESTAMPTZ,
-                start_date          TIMESTAMPTZ,
-                finish_date         TIMESTAMPTZ,
-                actual_start        TIMESTAMPTZ,
-                actual_finish       TIMESTAMPTZ,
-                baseline_start      TIMESTAMPTZ,
-                baseline_finish     TIMESTAMPTZ,
-                balance             DECIMAL(15,4),
-                cumulative          DECIMAL(15,4),
-                percent_complete    DECIMAL(5,2),
-                physical_percent_complete DECIMAL(5,2),
-                planned_duration    DECIMAL(10,1),
-                remaining_duration  DECIMAL(10,1),
-                actual_duration     DECIMAL(10,1),
-                primary_resource    VARCHAR(255),
-                total_quantity      DECIMAL(15,4),
-                uom                 VARCHAR(50),
-                priority            DECIMAL(10,2),
-                scope               TEXT,
-                weightage           DECIMAL(10,2),
-                phase               VARCHAR(100),
-                discipline          VARCHAR(100),
-                block_capacity      DECIMAL(10,2) DEFAULT 12.5,
-                spv_no              VARCHAR(100),
-                hold                VARCHAR(100),
-                front               VARCHAR(255),
-                plot                VARCHAR(255),
-                new_block_nom       VARCHAR(255),
-                last_sync_at        TIMESTAMPTZ DEFAULT NOW()
-            )
-        """)
-        await _exec("CREATE INDEX IF NOT EXISTS idx_solar_act_project ON solar_activities(project_object_id)")
-        await _exec("CREATE INDEX IF NOT EXISTS idx_solar_act_wbs ON solar_activities(wbs_object_id)")
-
-        await _exec("""
-            CREATE TABLE IF NOT EXISTS solar_wbs (
-                object_id           BIGINT PRIMARY KEY,
-                name                VARCHAR(255),
-                code                VARCHAR(50),
-                parent_object_id    BIGINT,
-                project_object_id   BIGINT,
-                status              VARCHAR(50)
-            )
-        """)
-        await _exec("CREATE INDEX IF NOT EXISTS idx_solar_wbs_project ON solar_wbs(project_object_id)")
-
-        await _exec("""
-            CREATE TABLE IF NOT EXISTS solar_resource_assignments (
-                object_id           BIGINT PRIMARY KEY,
-                activity_object_id  BIGINT,
-                resource_object_id  BIGINT,
-                resource_id         VARCHAR(50),
-                resource_name       VARCHAR(255),
-                resource_type       VARCHAR(50),
-                planned_units       DECIMAL(15,2),
-                actual_units        DECIMAL(15,2),
-                remaining_units     DECIMAL(15,2),
-                budget_at_completion_units DECIMAL(15,2),
-                project_object_id   BIGINT
-            )
-        """)
-        await _exec("CREATE INDEX IF NOT EXISTS idx_solar_ra_activity ON solar_resource_assignments(activity_object_id)")
-        await _exec("CREATE INDEX IF NOT EXISTS idx_solar_ra_project ON solar_resource_assignments(project_object_id)")
-
         # Issue logs table
         await _exec("""
             CREATE TABLE IF NOT EXISTS issue_logs (
@@ -187,19 +265,6 @@ async def run_migrations():
         await _exec("CREATE INDEX IF NOT EXISTS idx_issue_logs_priority ON issue_logs(priority)")
         await _exec("CREATE INDEX IF NOT EXISTS idx_issue_logs_created_at ON issue_logs(created_at)")
 
-        # Daily progress table
-        await _exec("""
-            CREATE TABLE IF NOT EXISTS dpr_daily_progress (
-                id SERIAL PRIMARY KEY, activity_object_id BIGINT NOT NULL,
-                progress_date DATE NOT NULL, today_value DECIMAL(15,4) DEFAULT 0,
-                cumulative_value DECIMAL(15,4) DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(activity_object_id, progress_date)
-            )
-        """)
-        await _exec("CREATE INDEX IF NOT EXISTS idx_dpr_daily_progress_date ON dpr_daily_progress(progress_date)")
-        await _exec("CREATE INDEX IF NOT EXISTS idx_dpr_daily_progress_activity ON dpr_daily_progress(activity_object_id)")
-
         # SSO columns
         await _exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS sso_provider VARCHAR(50)")
         await _exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS azure_oid VARCHAR(255)")
@@ -211,20 +276,41 @@ async def run_migrations():
         # Make password nullable for SSO
         await _exec("ALTER TABLE users ALTER COLUMN password DROP NOT NULL")
 
-        # Access requests table
+        # Notifications table
         await _exec("""
-            CREATE TABLE IF NOT EXISTS access_requests (
-                id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-                requested_role VARCHAR(50) NOT NULL, justification TEXT,
-                status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-                reviewed_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL, review_notes TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, reviewed_at TIMESTAMP
+            CREATE TABLE IF NOT EXISTS notifications (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                title VARCHAR(255) NOT NULL,
+                message TEXT NOT NULL,
+                type VARCHAR(20) DEFAULT 'info',
+                project_id BIGINT,
+                entry_id INTEGER,
+                sheet_type VARCHAR(50),
+                read BOOLEAN DEFAULT FALSE,
+                timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        await _exec("CREATE INDEX IF NOT EXISTS idx_access_requests_status ON access_requests(status)")
-        await _exec("CREATE INDEX IF NOT EXISTS idx_access_requests_user_id ON access_requests(user_id)")
 
-        logger.info("✓ Migrations completed successfully")
+        # DPR Entry Snapshots – versioned history of data_json at each lifecycle event
+        await _exec("""
+            CREATE TABLE IF NOT EXISTS dpr_entry_snapshots (
+                id SERIAL PRIMARY KEY,
+                entry_id INTEGER NOT NULL REFERENCES dpr_supervisor_entries(id) ON DELETE CASCADE,
+                version INTEGER NOT NULL DEFAULT 1,
+                action VARCHAR(50) NOT NULL,
+                data_json JSONB NOT NULL,
+                status_before VARCHAR(30),
+                status_after VARCHAR(30),
+                performed_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+                remarks TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await _exec("CREATE INDEX IF NOT EXISTS idx_snapshots_entry ON dpr_entry_snapshots(entry_id, version)")
+        await _exec("CREATE INDEX IF NOT EXISTS idx_snapshots_action ON dpr_entry_snapshots(action)")
+
+        logger.info("OK Migrations completed successfully")
 
     except Exception as e:
         logger.error(f"Migration error (non-fatal): {e}")

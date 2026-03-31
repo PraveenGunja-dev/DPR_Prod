@@ -9,7 +9,8 @@ interface Issue {
   startDate: string;
   finishedDate: string | null;
   delayedDays: number;
-  status: "Open" | "In Progress" | "Resolved";
+  status: "Open" | "In Progress" | "Resolved" | "Closed";
+  priority: "Low" | "Medium" | "High" | "Critical";
   actionRequired: string;
   remarks: string;
   attachment: File | null;
@@ -47,6 +48,7 @@ export function IssuesTable({ issues, onAddIssue }: IssuesTableProps) {
   // Define columns - memoized to prevent infinite renders in StyledExcelTable
   const columns = React.useMemo(() => [
     "Description",
+    "Priority",
     "Start Date",
     "Finished Date",
     "Delayed Days",
@@ -59,13 +61,14 @@ export function IssuesTable({ issues, onAddIssue }: IssuesTableProps) {
   // Convert issues to table data - memoized
   const tableData = React.useMemo(() => issues.map(issue => [
     issue.description,
-    issue.startDate,
-    issue.finishedDate || "N/A",
-    issue.delayedDays.toString(),
+    issue.priority,
+    formatDate(issue.startDate),
+    formatDate(issue.finishedDate),
+    String(issue.delayedDays),
     issue.status,
-    issue.actionRequired || "N/A",
-    issue.remarks || "N/A",
-    issue.attachmentName || "N/A"
+    issue.actionRequired,
+    issue.remarks,
+    issue.attachmentName || "No attachment"
   ]), [issues]);
 
   const handleDataChange = React.useCallback(() => { }, []);

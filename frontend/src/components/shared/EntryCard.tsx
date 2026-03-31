@@ -27,6 +27,7 @@ interface EntryCardProps {
   sheetType: string;
   showPushToP6?: boolean;
   showSendToPMAG?: boolean;
+  projects?: any[];
 }
 
 export const EntryCard: React.FC<EntryCardProps> = ({
@@ -41,7 +42,8 @@ export const EntryCard: React.FC<EntryCardProps> = ({
   onSendToPMAG,
   sheetType,
   showPushToP6 = false,
-  showSendToPMAG = false
+  showSendToPMAG = false,
+  projects = []
 }) => {
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -68,24 +70,68 @@ export const EntryCard: React.FC<EntryCardProps> = ({
     ? (typeof entry.data_json === 'string' ? JSON.parse(entry.data_json) : entry.data_json)
     : null;
 
-  // Prepare data for StyledExcelTable
+  // Prepare data for StyledExcelTable with proper columns for each sheet type
   const prepareTableData = () => {
-    // Make sure we have a valid array
     const rows = Array.isArray(entryData?.rows) ? entryData.rows : [];
-
-    // If empty array, or first element is missing, return empty structure
     if (rows.length === 0 || !rows[0]) {
       return { columns: [], data: [] };
     }
 
-    // Get columns from first row keys safely
-    const columns = Object.keys(rows[0]);
+    let columns: string[] = [];
+    let fieldMap: string[] = [];
 
-    // Convert rows to array format for StyledExcelTable safely
+    const formatDateStr = (dateStr: string) => {
+      if (!dateStr) return '';
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
+      }
+      return dateStr;
+    };
+
+    let todayLabel = "Today";
+    let yesterdayLabel = "Yesterday";
+    if (entryData?.staticHeader?.progressDate) {
+      const td = new Date(entryData.staticHeader.progressDate);
+      const yd = new Date(td.getTime() - 86400000);
+      todayLabel = formatDateStr(entryData.staticHeader.progressDate);
+      yesterdayLabel = formatDateStr(yd.toISOString().split('T')[0]);
+    }
+
+    // Define columns based on sheetType to match Supervisor/SitePM view
+    switch (sheetType) {
+      case 'dp_qty':
+        columns = ["Sl No", "Activity ID", "Description", "UOM", "Scope", "Completed", "Balance", "Baseline Start", "Baseline Finish", "Forecast Start", "Forecast Finish", yesterdayLabel, todayLabel];
+        fieldMap = ["slNo", "activityId", "description", "uom", "totalQuantity", "cumulative", "balance", "basePlanStart", "basePlanFinish", "forecastStart", "forecastFinish", "yesterdayValue", "todayValue"];
+        break;
+      case 'dp_vendor_block':
+        columns = ["Activity ID", "Description", "Plot", "Priority", "Block/Nom", "Contractor Name", "Scope", "Completed", "Completion %", "Hold Due to", "Front", "Remarks", yesterdayLabel, todayLabel];
+        fieldMap = ["activityId", "activities", "plot", "priority", "newBlockNom", "contractorName", "scope", "actual", "completionPercentage", "holdDueToWtg", "front", "remarks", "yesterdayValue", "todayValue"];
+        break;
+      case 'dp_vendor_idt':
+        columns = ["Activity ID", "Description", "Plot", "Vendor", "IDT Date", "Actual Date", "Status", yesterdayLabel, todayLabel];
+        fieldMap = ["activityId", "activities", "plot", "vendor", "idtDate", "actualDate", "status", "yesterdayValue", "todayValue"];
+        break;
+      case 'dp_block':
+        columns = ["Sl No", "Activity ID", "Description", "Block", "Phase", "SPV Number", "Scope", "Completed", "Balance", "Baseline Start", "Baseline Finish", "Actual Start", "Actual Finish"];
+        fieldMap = ["slNo", "activityId", "description", "block", "phase", "spvNumber", "totalQuantity", "cumulative", "balance", "basePlanStart", "basePlanFinish", "actualStart", "actualFinish"];
+        break;
+      case 'manpower_details':
+        columns = ["Sl No", "Activity ID", "Activity", "Block", "Section", "Contractor Name", yesterdayLabel, todayLabel];
+        fieldMap = ["slNo", "activityId", "activity", "block", "section", "contractorName", "yesterdayValue", "todayValue"];
+        break;
+      default:
+        // Fallback to automatic column discovery if type is unknown
+        columns = Object.keys(rows[0]);
+        fieldMap = columns;
+    }
+
+    // Convert rows to array format for StyledExcelTable
     const data = rows.map((row: any) =>
-      columns.map((col) => {
+      fieldMap.map((field) => {
         if (!row) return '';
-        return row[col] !== undefined && row[col] !== null ? String(row[col]) : '';
+        const val = row[field];
+        return val !== undefined && val !== null ? String(val) : '';
       })
     );
 
@@ -131,7 +177,7 @@ export const EntryCard: React.FC<EntryCardProps> = ({
                 {entry.supervisor_name || 'Supervisor'} ({entry.supervisor_email || entry.user_email || 'N/A'})
               </span>
               <span className="text-xs font-medium text-primary hidden md:block">
-                Project ID: {entry.project_id}
+                Project: {projects?.find(p => String(p.id) === String(entry.project_id) || String(p.ObjectId) === String(entry.project_id))?.name || `ID: ${entry.project_id}`}
               </span>
               <span className="text-xs text-muted-foreground mt-1 md:mt-0">
                 {sheetType.replace(/_/g, ' ')}

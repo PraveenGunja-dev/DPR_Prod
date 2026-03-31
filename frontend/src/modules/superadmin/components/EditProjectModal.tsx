@@ -11,6 +11,7 @@ interface Project {
   Progress?: number;
   PlanStart?: string;
   PlanEnd?: string;
+  ProjectType?: string;
 }
 
 interface EditProjectModalProps {
@@ -24,6 +25,7 @@ interface EditProjectModalProps {
     progress: number;
     planStart: string;
     planEnd: string;
+    projectType: string;
   }) => Promise<void>;
   loading: boolean;
 }
@@ -41,7 +43,8 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
     status: 'planning',
     progress: 0,
     planStart: '',
-    planEnd: ''
+    planEnd: '',
+    projectType: 'solar'
   });
 
   // Lock body scroll when modal is open
@@ -49,13 +52,22 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
 
   useEffect(() => {
     if (project) {
+      const pName = project.Name || (project as any).name || '';
+      const pLoc = project.Location || (project as any).location || '';
+      const pStatus = project.Status || (project as any).status || 'planning';
+      const pProgress = project.Progress || (project as any).progress || 0;
+      const pPlanStart = project.PlanStart || (project as any).planStart || (project as any).PlannedStartDate;
+      const pPlanEnd = project.PlanEnd || (project as any).planEnd || (project as any).PlannedFinishDate;
+      const pType = project.ProjectType || (project as any).projectType || 'solar';
+
       setFormData({
-        name: project.Name,
-        location: project.Location || '',
-        status: project.Status || 'planning',
-        progress: project.Progress || 0,
-        planStart: project.PlanStart ? new Date(project.PlanStart).toISOString().split('T')[0] : '',
-        planEnd: project.PlanEnd ? new Date(project.PlanEnd).toISOString().split('T')[0] : ''
+        name: pName,
+        location: pLoc,
+        status: pStatus,
+        progress: Number(pProgress),
+        planStart: pPlanStart ? new Date(pPlanStart).toISOString().split('T')[0] : '',
+        planEnd: pPlanEnd ? new Date(pPlanEnd).toISOString().split('T')[0] : '',
+        projectType: pType
       });
     }
   }, [project]);
@@ -64,7 +76,10 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSave(project.ObjectId, formData);
+    const pId = project.ObjectId || (project as any).id;
+    if (pId) {
+      await onSave(pId, formData);
+    }
   };
 
   return (
@@ -78,14 +93,30 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
         </div>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
+            <label className="block text-sm font-medium mb-1 dark:text-gray-300">Project Type</label>
+            <select
+              className="w-full p-2 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+              value={formData.projectType}
+              onChange={(e) => setFormData({ ...formData, projectType: e.target.value })}
+              required
+            >
+              <option value="solar">Solar</option>
+              <option value="wind">Wind</option>
+              <option value="pss">PSS</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div className="mb-4">
             <label className="block text-sm font-medium mb-1 dark:text-gray-300">Project Name</label>
             <Input
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
-              className="dark:bg-gray-700 dark:text-white dark:border-gray-600"
+              disabled
+              className="dark:bg-gray-700 dark:text-white dark:border-gray-600 opacity-70"
             />
+            <p className="text-xs text-gray-500 mt-1">P6 Project names cannot be edited.</p>
           </div>
           <div className="mb-4">
             <label className="block text-sm font-medium mb-1 dark:text-gray-300">Location</label>
@@ -93,16 +124,17 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
               type="text"
               value={formData.location}
               onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-              className="dark:bg-gray-700 dark:text-white dark:border-gray-600"
+              disabled
+              className="dark:bg-gray-700 dark:text-white dark:border-gray-600 opacity-70"
             />
           </div>
           <div className="mb-4">
             <label className="block text-sm font-medium mb-1 dark:text-gray-300">Status</label>
             <select
-              className="w-full p-2 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+              className="w-full p-2 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600 opacity-70"
               value={formData.status}
               onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              required
+              disabled
             >
               <option value="planning">Planning</option>
               <option value="active">Active</option>
@@ -110,36 +142,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
               <option value="on hold">On Hold</option>
             </select>
           </div>
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-1 dark:text-gray-300">Progress (%)</label>
-            <Input
-              type="number"
-              min="0"
-              max="100"
-              value={formData.progress}
-              onChange={(e) => setFormData({ ...formData, progress: parseInt(e.target.value) || 0 })}
-              className="dark:bg-gray-700 dark:text-white dark:border-gray-600"
-            />
-          </div>
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-1 dark:text-gray-300">Plan Start Date</label>
-            <Input
-              type="date"
-              value={formData.planStart}
-              onChange={(e) => setFormData({ ...formData, planStart: e.target.value })}
-              className="dark:bg-gray-700 dark:text-white dark:border-gray-600"
-            />
-          </div>
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-1 dark:text-gray-300">Plan End Date</label>
-            <Input
-              type="date"
-              value={formData.planEnd}
-              onChange={(e) => setFormData({ ...formData, planEnd: e.target.value })}
-              className="dark:bg-gray-700 dark:text-white dark:border-gray-600"
-            />
-          </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 mt-6">
             <Button type="button" variant="outline" onClick={onClose} className="dark:border-gray-600 dark:text-gray-300">
               Cancel
             </Button>

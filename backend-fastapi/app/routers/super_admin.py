@@ -6,9 +6,9 @@ Direct port of Express routes/superAdmin.js
 
 import json
 import logging
+import re
 from typing import Optional, Any
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 
 from app.auth.dependencies import get_current_user, require_super_admin
 from app.auth.password import hash_password
@@ -16,7 +16,6 @@ from app.database import get_db, PoolWrapper
 from app.utils.system_logger import create_system_log
 
 logger = logging.getLogger("adani-flow.super_admin")
-
 router = APIRouter(prefix="/api/super-admin", tags=["Super Admin"])
 
 
@@ -39,51 +38,72 @@ async def get_all_users(
 
 @router.post("/users", status_code=201)
 async def create_user(
-    body: dict[str, Any],
+    body: dict[str, Any] = Body(...),
     pool: PoolWrapper = Depends(get_db),
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
+    logger.info("--- CREATE USER START ---")
+    
     name: str = str(body.get("name", ""))
     email: str = str(body.get("email", ""))
     password: str = str(body.get("password", ""))
     role: str = str(body.get("role", ""))
 
+    logger.info(f"Payload: name={name}, email={email}, role={role}")
+
     if not all([name, email, password, role]):
         raise HTTPException(400, detail={"message": "All fields are required: name, email, password, role"})
 
-    import re
     if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
         raise HTTPException(400, detail={"message": "Invalid email format"})
 
     if len(password) < 8:
         raise HTTPException(400, detail={"message": "Password must be at least 8 characters long"})
 
-    valid_roles = ["supervisor", "Site PM", "PMAG", "admin", "Super Admin"]
+    valid_roles = ["supervisor", "Site PM", "PMAG", "admin", "Super Admin", "pending_approval"]
     if role not in valid_roles:
         raise HTTPException(400, detail={"message": f"Invalid role. Must be one of: {', '.join(valid_roles)}"})
 
-    hashed = hash_password(password)
     try:
-        row = await pool.fetchrow(
-            "INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING user_id, name, email, role",
-            name, email, hashed, role,
-        )
-    except Exception:
-        raise HTTPException(400, detail={"message": "Email already exists"})
+        hashed = hash_password(password)
+        logger.info("Password hashed. Inserting into database...")
+        
+        try:
+            row = await pool.fetchrow(
+                "INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING user_id, name, email, role",
+                name, email, hashed, role,
+            )
+        except Exception as e:
+            logger.error(f"DATABASE INSERT FAILED: {e}")
+            raise HTTPException(400, detail={"message": f"Database insertion failure: {e}"})
 
-    await create_system_log("USER_CREATED", current_user["userId"], f"User: {name} ({email})", f"Created user {name} with role {role}")
+        logger.info(f"User created in DB with ID: {row['user_id']}. Logging action...")
+        
+        try:
+            perf_id = current_user.get("userId")
+            await create_system_log("USER_CREATED", perf_id, f"User: {name} ({email})", f"Created user {name} with role {role}")
+            logger.info("Action logged to system_logs successfully")
+        except Exception as e:
+            logger.error(f"SYSTEM LOG ERROR (non-fatal): {e}")
 
-    # Send welcome email (non-blocking)
-    try:
-        from app.services.email_service import send_welcome_email
-        await send_welcome_email(email, name, password)
+        # Send welcome email (non-blocking)
+        try:
+            from app.services.email_service import send_welcome_email
+            await send_welcome_email(email, name, password)
+            logger.info("Welcome email script executed.")
+        except Exception as e:
+            logger.error(f"EMAIL ERROR (non-fatal): {e}")
+
+        logger.info("--- CREATE USER COMPLETE ---")
+        return {
+            "message": "User created successfully",
+            "user": {"ObjectId": row["user_id"], "Name": row["name"], "Email": row["email"], "Role": row["role"]},
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to send welcome email: {e}")
-
-    return {
-        "message": "User created successfully",
-        "user": {"ObjectId": row["user_id"], "Name": row["name"], "Email": row["email"], "Role": row["role"]},
-    }
+        logger.error(f"UNEXPECTED 500 CRASH in create_user: {e}", exc_info=True)
+        raise HTTPException(500, detail={"message": "Internal server error", "error": str(e)})
 
 
 @router.get("/users/{user_id}")
@@ -105,7 +125,7 @@ async def get_user(
 @router.put("/users/{user_id}")
 async def update_user(
     user_id: int,
-    body: dict[str, Any],
+    body: dict[str, Any] = Body(...),
     pool: PoolWrapper = Depends(get_db),
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
@@ -116,14 +136,13 @@ async def update_user(
     if "name" in body:
         updates.append(f"name = ${idx}"); params.append(str(body["name"])); idx += 1
     if "email" in body:
-        import re
         email_val = str(body["email"])
         if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email_val):
             raise HTTPException(400, detail={"message": "Invalid email format"})
         updates.append(f"email = ${idx}"); params.append(email_val); idx += 1
     if "role" in body:
         role_val = str(body["role"])
-        valid_roles = ["supervisor", "Site PM", "PMAG", "admin", "Super Admin"]
+        valid_roles = ["supervisor", "Site PM", "PMAG", "admin", "Super Admin", "pending_approval"]
         if role_val not in valid_roles:
             raise HTTPException(400, detail={"message": f"Invalid role. Must be one of: {', '.join(valid_roles)}"})
         updates.append(f"role = ${idx}"); params.append(body["role"]); idx += 1
@@ -148,11 +167,12 @@ async def update_user(
     if not row:
         raise HTTPException(404, detail={"message": "User not found"})
 
+    perf_id = current_user.get("userId")
     if "role" in body and body["role"] != old["role"]:
-        await create_system_log("USER_ROLE_CHANGED", current_user["userId"], f"User: {row['Name']} ({row['Email']})", f"Role changed from {old['role']} to {body['role']}")
+        await create_system_log("USER_ROLE_CHANGED", perf_id, f"User: {row['Name']} ({row['Email']})", f"Role changed from {old['role']} to {body['role']}")
     if "isActive" in body and body["isActive"] != old["is_active"]:
         action = "USER_ACTIVATED" if body["isActive"] else "USER_DEACTIVATED"
-        await create_system_log(action, current_user["userId"], f"User: {row['Name']} ({row['Email']})", f"User {'activated' if body['isActive'] else 'deactivated'}")
+        await create_system_log(action, perf_id, f"User: {row['Name']} ({row['Email']})", f"User {'activated' if body['isActive'] else 'deactivated'}")
 
     return {"message": "User updated successfully", "user": dict(row)}
 
@@ -172,10 +192,39 @@ async def delete_user(
     return {"message": "User deleted successfully"}
 
 
+@router.get("/roles")
+async def get_roles(
+    pool: PoolWrapper = Depends(get_db),
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    rows = await pool.fetch("SELECT role, COUNT(*) as count FROM users GROUP BY role")
+    
+    roles_metadata = {
+        "supervisor": "Site supervisor for entering daily progress reports",
+        "Site PM": "Project Manager responsible for reviewing and approving site entries",
+        "PMAG": "Project Management Advisory Group - Final reviewer",
+        "Super Admin": "Full system access, user management, and configuration",
+        "pending_approval": "User awaiting initial admin review"
+    }
+    
+    found_roles = {r["role"]: r["count"] for r in rows}
+    results = []
+    
+    for role_name, description in roles_metadata.items():
+        results.append({
+            "id": role_name,
+            "name": role_name,
+            "permissions": description,
+            "userCount": found_roles.get(role_name, 0)
+        })
+        
+    return results
+
+
 @router.post("/users/{user_id}/reset-password")
 async def reset_password(
     user_id: int,
-    body: dict[str, Any],
+    body: dict[str, Any] = Body(...),
     pool: PoolWrapper = Depends(get_db),
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
@@ -191,10 +240,8 @@ async def reset_password(
     if not row:
         raise HTTPException(404, detail={"message": "User not found"})
         
-    # Send password reset email
     try:
         from app.services.email_service import send_welcome_email
-        # Re-use welcome email for password reset notification
         await send_welcome_email(row["email"], row["name"], new_password)
     except Exception as e:
         logger.error(f"Failed to send password reset email: {e}")
@@ -212,9 +259,10 @@ async def get_all_projects(
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
     rows = await pool.fetch("""
-        SELECT "ObjectId", "Name", NULL AS "Location", "Status", 0 AS "Progress",
+        SELECT "ObjectId", "Name", NULL AS "Location", 'active' AS "Status", 0 AS "Progress",
                "PlannedStartDate" AS "PlanStart", "PlannedFinishDate" AS "PlanEnd",
-               COALESCE("LastSyncAt", CURRENT_TIMESTAMP) AS "CreatedAt", 'p6' AS "Source"
+               COALESCE("LastSyncAt", CURRENT_TIMESTAMP) AS "CreatedAt", 'p6' AS "Source",
+               COALESCE(project_type, 'solar') AS "ProjectType"
         FROM p6_projects ORDER BY "Name"
     """)
     return [dict(r) for r in rows]
@@ -222,7 +270,7 @@ async def get_all_projects(
 
 @router.post("/projects", status_code=201)
 async def create_project(
-    body: dict[str, Any],
+    body: dict[str, Any] = Body(...),
     pool: PoolWrapper = Depends(get_db),
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
@@ -239,10 +287,18 @@ async def create_project(
 @router.put("/projects/{project_id}")
 async def update_project(
     project_id: int,
-    body: dict[str, Any],
+    body: dict[str, Any] = Body(...),
     pool: PoolWrapper = Depends(get_db),
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
+    # Check if it's a P6 project
+    is_p6 = await pool.fetchrow('SELECT 1 FROM p6_projects WHERE "ObjectId" = $1', project_id)
+    if is_p6:
+        if "projectType" in body:
+            await pool.execute('UPDATE p6_projects SET project_type = $1 WHERE "ObjectId" = $2', body["projectType"], project_id)
+        return {"message": "Project type updated successfully"}
+    
+    # Fallback for manual legacy projects
     updates = []
     params = []
     idx = 1
@@ -352,7 +408,7 @@ async def get_user_sheets(
 
 @router.post("/users/assign-project")
 async def assign_project(
-    body: dict[str, Any],
+    body: dict[str, Any] = Body(...),
     pool: PoolWrapper = Depends(get_db),
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
@@ -376,7 +432,7 @@ async def assign_project(
 
 @router.post("/users/unassign-project")
 async def unassign_project(
-    body: dict[str, Any],
+    body: dict[str, Any] = Body(...),
     pool: PoolWrapper = Depends(get_db),
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
@@ -414,8 +470,6 @@ async def get_all_entries(
 ):
     """Get all sheet entries (Super Admin only)."""
     
-    # Base query for combined entries
-    # Note: custom_sheet_entries might not exist in the new schema yet, but we'll include it for parity
     query = """
       WITH combined_entries AS (
         SELECT 
@@ -468,7 +522,6 @@ async def get_all_entries(
 
     rows = await pool.fetch(query, *params)
 
-    # Count Query
     count_query = """
       WITH combined_entries AS (
         SELECT sheet_type::text, project_id, status FROM dpr_supervisor_entries
@@ -494,10 +547,6 @@ async def get_all_entries(
     }
 
 
-# ==========================================================
-# SNAPSHOT & FILTERS
-# ==========================================================
-
 @router.get("/snapshot")
 async def get_snapshot(
     startDate: Optional[str] = None,
@@ -507,10 +556,6 @@ async def get_snapshot(
     pool: PoolWrapper = Depends(get_db),
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
-    """Get snapshot data with filters (Super Admin only)."""
-    
-    # Base query for combined entries
-    # Note: custom_sheet_entries might not exist in the new schema yet, but we'll include it for parity
     query = """
       WITH combined_entries AS (
         SELECT 
@@ -579,7 +624,6 @@ async def get_snapshot(
 
     entries = await pool.fetch(query, *params)
 
-    # Statistics Query
     stats_query = """
       SELECT 
         COUNT(*) as total_entries,

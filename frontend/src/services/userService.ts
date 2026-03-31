@@ -144,6 +144,15 @@ export const requestAccess = async (userId: number, requestedRole: string, justi
     }
 };
 
+export const checkAccessStatus = async (userId: number): Promise<{ role: string; isActive: boolean }> => {
+    try {
+        const response = await apiClient.get(`/sso/status/${userId}`);
+        return response.data;
+    } catch (error) {
+        return handleApiError(error, 'Failed to check access status');
+    }
+};
+
 export const refreshAccessToken = async (refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> => {
     try {
         const response = await apiClient.post('/auth/refresh-token', { refreshToken });

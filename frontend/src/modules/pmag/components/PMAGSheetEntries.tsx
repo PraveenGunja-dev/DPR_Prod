@@ -25,6 +25,7 @@ interface PMAGSheetEntriesProps {
   expandedEntries: Record<number, boolean>;
   setExpandedEntries: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
   onPushToP6?: (entry: any) => void;
+  projects: any[];
 }
 
 export const PMAGSheetEntries: React.FC<PMAGSheetEntriesProps> = ({
@@ -35,7 +36,8 @@ export const PMAGSheetEntries: React.FC<PMAGSheetEntriesProps> = ({
   onReject,
   expandedEntries,
   setExpandedEntries,
-  onPushToP6
+  onPushToP6,
+  projects
 }) => {
   const [activeTab, setActiveTab] = useState('dp_qty');
 
@@ -105,7 +107,8 @@ export const PMAGSheetEntries: React.FC<PMAGSheetEntriesProps> = ({
               onReject={() => onReject(entry.id)}
               onPushToP6={() => handlePushToP6(entry)}
               sheetType={sheetType}
-              showPushToP6={true}
+              showPushToP6={['dp_vendor_idt', 'dp_vendor_block', 'manpower_details'].includes(sheetType)}
+              projects={projects}
             />
           );
         })}

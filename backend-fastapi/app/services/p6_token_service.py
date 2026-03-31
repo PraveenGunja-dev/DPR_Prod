@@ -27,7 +27,7 @@ def get_http_client(timeout: float = 10.0) -> httpx.AsyncClient:
     transport = None
     if proxy_url:
         logger.info(f"[P6 Token] Using Proxy: {proxy_url}")
-        transport = httpx.AsyncHTTPTransport(proxy=proxy_url)
+        transport = httpx.AsyncHTTPTransport(proxy=proxy_url, verify=False)
 
     return httpx.AsyncClient(
         verify=False,  # rejectUnauthorized: false

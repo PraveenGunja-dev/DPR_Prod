@@ -90,10 +90,10 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
         setLoading(true);
         try {
             await registerUser({
-                Name: formData.name,
-                Email: formData.email,
+                name: formData.name,
+                email: formData.email,
                 password: formData.password,
-                Role: formData.role
+                role: formData.role
             });
 
             toast.success(`${formData.role === "supervisor" ? "Supervisor" : "Site PM"} created successfully!`);

@@ -52,8 +52,8 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DialogContent
-                className="max-w-[75vw] w-[75vw] max-h-[90vh] overflow-y-auto p-0"
-                style={{ width: '75vw' }}
+                className="max-w-[95vw] w-[95vw] max-h-[95vh] overflow-y-auto p-0"
+                style={{ width: '95vw' }}
             >
                 <DialogHeader className="sticky top-0 z-10 bg-background border-b px-6 py-4">
                     <div className="flex items-center justify-between">

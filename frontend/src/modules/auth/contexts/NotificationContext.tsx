@@ -49,14 +49,9 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     return [];
   });
 
-  // Filter notifications to only include those from the last 2 days
+  // Return all fetched notifications (backend already limits to top 50)
   const getRecentNotifications = (): Notification[] => {
-    const twoDaysAgo = new Date();
-    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-    
-    return notifications.filter(notification => 
-      new Date(notification.timestamp) >= twoDaysAgo
-    );
+    return notifications;
   };
 
   const recentNotifications = getRecentNotifications();
@@ -82,7 +77,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
   useEffect(() => {
     if (token) {
       fetchNotifications();
-      const interval = setInterval(fetchNotifications, 30000); // Poll every 30 seconds
+      const interval = setInterval(fetchNotifications, 60000); // Poll every 60 seconds
       return () => clearInterval(interval);
     }
   }, [token, fetchNotifications]);

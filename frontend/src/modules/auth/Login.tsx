@@ -11,27 +11,18 @@ import { useRef, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { PublicClientApplication } from "@azure/msal-browser";
-import { msalConfig, loginRequest } from "@/config/msalConfig";
 import Particles, { initParticlesEngine } from "@tsparticles/react";
 import { loadFull } from "tsparticles";
 import { ThemeToggle } from "@/components/ThemeToggle";
+// No longer using msal-browser in the frontend as we switched to Python Web App flow
+const msalInstance = null;
 
-// Initialize MSAL instance
-let msalInstance: PublicClientApplication | null = null;
-try {
-  msalInstance = new PublicClientApplication(msalConfig);
-} catch (err) {
-  console.error("[Login] Failed to initialize MSAL:", err);
-}
-
-const MicrosoftIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-    <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-    <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-    <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-  </svg>
+const AdaniIcon = () => (
+  <img 
+    src={`${import.meta.env.BASE_URL}logo.png`} 
+    alt="Adani" 
+    className="w-20 h-10 object-contain" 
+  />
 );
 
 const LoginForm = () => {
@@ -43,26 +34,13 @@ const LoginForm = () => {
   const [msalReady, setMsalReady] = useState(false);
   const [loginMode, setLoginMode] = useState<'selection' | 'credentials'>('selection');
 
-  // Initialize MSAL on mount
-  useEffect(() => {
-    const initMsal = async () => {
-      if (msalInstance) {
-        try {
-          await msalInstance.initialize();
-          // Handle redirect response
-          const response = await msalInstance.handleRedirectPromise();
-          if (response) {
-            await handleSSOResponse(response.idToken, response.accessToken);
-          }
-          setMsalReady(true);
-        } catch (err) {
-          console.error("[Login] MSAL initialization error:", err);
-          setMsalReady(true); // Still allow credential login
-        }
-      }
-    };
-    initMsal();
-  }, []);
+  const handleSSOLogin = () => {
+    setSsoLoading(true);
+    setError(null);
+    console.log('[LoginForm] Redirecting to SSO login...');
+    // Redirect to the Python backend SSO login route
+    window.location.href = `${window.location.origin}/api/sso/login`;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,62 +71,6 @@ const LoginForm = () => {
     }
   };
 
-  const handleSSOResponse = async (idToken: string, accessToken: string) => {
-    setSsoLoading(true);
-    setError(null);
-
-    try {
-      const response = await ssoLogin(idToken, accessToken);
-      
-      if (response.status === 'authenticated') {
-        const user = response.user;
-        if (user.Role === 'Super Admin') {
-          navigate("/superadmin");
-        } else {
-          navigate("/projects");
-        }
-      } else if (response.status === 'pending_approval') {
-        // Navigate to access pending page
-        navigate("/access-pending", { state: { user: response.user, isNewUser: response.isNewUser } });
-      } else if (response.status === 'inactive') {
-        setError('Your account has been deactivated. Please contact the administrator.');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'SSO login failed');
-    } finally {
-      setSsoLoading(false);
-    }
-  };
-
-  const handleSSOLogin = async () => {
-    if (!msalInstance || !msalReady) {
-      setError('SSO is not available. Please use credential login.');
-      return;
-    }
-
-    setSsoLoading(true);
-    setError(null);
-
-    try {
-      const response = await msalInstance.loginPopup(loginRequest);
-      
-      if (response.idToken && response.accessToken) {
-        await handleSSOResponse(response.idToken, response.accessToken);
-      } else {
-        setError('Failed to get authentication tokens from Microsoft.');
-      }
-    } catch (err: any) {
-      // Handle user cancellation gracefully
-      if (err.errorCode === 'user_cancelled' || err.name === 'BrowserAuthError') {
-        setSsoLoading(false);
-        return;
-      }
-      console.error("[Login] SSO Error:", err);
-      setError(err.message || 'SSO login failed');
-      setSsoLoading(false);
-    }
-  };
-
   return (
     <div className="w-full relative min-h-[220px]">
       <AnimatePresence mode="wait">
@@ -165,11 +87,11 @@ const LoginForm = () => {
             <Button
               type="button"
               onClick={handleSSOLogin}
-              disabled={ssoLoading || !msalReady}
+              disabled={ssoLoading}
               variant="outline"
               className="group relative w-full max-w-sm h-16 border-[#0B74B0]/30 bg-[#0B74B0]/5 hover:bg-[#0B74B0]/10 hover:border-[#0B74B0]/60 transition-all duration-300 rounded-2xl shadow-sm overflow-hidden"
             >
-              <div className="flex items-center justify-center gap-4 w-full">
+              <div className="flex items-center justify-center gap-8 w-full">
                 {ssoLoading ? (
                   <div className="flex items-center gap-3 text-[#0B74B0] dark:text-white font-bold tracking-widest text-xs">
                     <div className="h-4 w-4 rounded-full border-2 border-[#0B74B0] border-t-transparent animate-spin"></div>
@@ -177,8 +99,8 @@ const LoginForm = () => {
                   </div>
                 ) : (
                   <>
-                    <MicrosoftIcon />
-                    <span className="text-[#0B74B0] dark:text-white font-bold tracking-[0.15em] text-xs uppercase">Microsoft SSO</span>
+                    {/* <AdaniIcon /> */}
+                    <span className="text-[#0B74B0] dark:text-white font-bold tracking-[0.15em] text-lg uppercase">SSO Login</span>
                   </>
                 )}
               </div>
@@ -193,8 +115,8 @@ const LoginForm = () => {
               className="group relative w-full max-w-sm h-16 border-zinc-200 dark:border-white/10 bg-transparent hover:bg-zinc-50 dark:hover:bg-zinc-800/30 hover:border-zinc-400 dark:hover:border-white/30 transition-all duration-300 rounded-2xl shadow-sm"
             >
               <div className="flex items-center justify-center gap-4 w-full">
-                <FiMail className="w-5 h-5 text-zinc-600 dark:text-zinc-400 group-hover:text-primary transition-colors" />
-                <span className="text-zinc-700 dark:text-zinc-200 font-bold tracking-[0.15em] text-xs uppercase group-hover:text-primary transition-colors">Email Access</span>
+                <FiMail className="w-8 h-8 text-zinc-600 dark:text-zinc-400 group-hover:text-primary transition-colors" />
+                <span className="text-zinc-700 dark:text-zinc-200 font-bold tracking-[0.15em] text-lg uppercase group-hover:text-primary transition-colors">Email Access</span>
               </div>
             </Button>
             
@@ -256,14 +178,14 @@ const LoginForm = () => {
                 disabled={loading}
                 className="w-full py-7 bg-primary border-primary hover:bg-primary/90 text-white font-bold transition-all duration-300 uppercase tracking-[0.2em] rounded-2xl shadow-md"
               >
-                <span className="ml-[0.2em]">{loading ? "AUTHENTICATING..." : "ENTER SYSTEM"}</span>
+                <span className="ml-[0.2em]">{loading ? "AUTHENTICATING..." : "LOGIN"}</span>
               </Button>
               <button
                 type="button"
                 onClick={() => { setLoginMode('selection'); setError(null); }}
                 className="text-muted-foreground hover:text-primary transition-colors text-xs uppercase tracking-[0.1em] ml-[0.1em] flex items-center"
               >
-                <FiArrowLeft className="mr-2" /> RETURN MODE
+                <FiArrowLeft className="mr-2" /> GO BACK
               </button>
             </div>
           </motion.form>
@@ -272,6 +194,8 @@ const LoginForm = () => {
     </div>
   );
 };
+
+
 
 export default LoginForm;
 

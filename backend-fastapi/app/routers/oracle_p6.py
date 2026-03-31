@@ -7,7 +7,8 @@ Direct port of Express routes/oracleP6.js
 import json
 import logging
 from typing import Optional, Any
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from sync_all_p6_data import sync_data
 from app.auth.dependencies import get_current_user
 from app.database import get_db, PoolWrapper
 
@@ -146,16 +147,57 @@ async def get_manpower_details_data(
     pool: PoolWrapper = Depends(get_db),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    # Aggregate only MP (Manpower) resource assignments per activity
+    # Returns same column set as Vendor IDT for consistent display
+    # NOTE: Pass LIKE pattern as parameter $2 to avoid psycopg interpreting % as placeholder
+    mp_pattern = "%MP%"
     rows = await pool.fetch("""
-        SELECT sra.resource_object_id as resource_id, sra.resource_name,
-               sra.resource_type, sa.wbs_name as block, sa.name as activity_name
+        SELECT sa.activity_id,
+               sa.name as activity_name,
+               COALESCE(sa.new_block_nom, sa.plot, sa.wbs_name, '') as block,
+               COALESCE(SUM(sra.planned_units), 0) as budgeted_units,
+               COALESCE(SUM(sra.actual_units), 0) as actual_units,
+               COALESCE(SUM(sra.remaining_units), 0) as remaining_units,
+               sa.percent_complete
         FROM solar_resource_assignments sra
         LEFT JOIN solar_activities sa ON sra.activity_object_id = sa.object_id
-        WHERE sra.resource_type = 'Labor' AND sra.project_object_id = $1 ORDER BY sra.resource_name
-    """, projectId)
+        WHERE UPPER(sra.resource_id) LIKE $2
+          AND sra.project_object_id = $1
+        GROUP BY sa.activity_id, sa.name, sa.new_block_nom, sa.plot, sa.wbs_name, sa.percent_complete
+        ORDER BY sa.name ASC, sa.activity_id ASC
+    """, projectId, mp_pattern)
 
-    data = [{"activityId": str(r["resource_id"] or ""), "slNo": str(i + 1), "block": r["block"] or "", "contractorName": "", "activity": r["activity_name"] or "", "section": "", "yesterdayValue": "", "todayValue": ""} for i, r in enumerate(rows)]
-    return {"message": "Manpower Details fetched from P6", "projectId": projectId, "rowCount": len(data), "totalManpower": len(rows), "data": data, "source": "p6"}
+    data = []
+    for r in rows:
+        budgeted = float(r["budgeted_units"] or 0)
+        actual = float(r["actual_units"] or 0)
+        p6_remaining = float(r["remaining_units"] or 0)
+        
+        # Calculate derived remaining if P6 says 0 but we have a budget/actual gap
+        # Or if the user expects the difference
+        calculated_remaining = max(0, budgeted - actual)
+        # Use P6 remaining if it's more than our calculation (e.g. if scope increased)
+        final_remaining = max(p6_remaining, calculated_remaining)
+        
+        # Priority for percentage: if we have units, use units ratio. 
+        # Otherwise fallback to P6 physical % complete.
+        if budgeted > 0:
+            pct = round((actual / budgeted) * 100, 2)
+        else:
+            pct = float(r["percent_complete"] or 0)
+            
+        data.append({
+            "activityId": str(r["activity_id"] or ""),
+            "description": r["activity_name"] or "",
+            "block": (r["block"] or "").upper(),
+            "budgetedUnits": str(round(budgeted, 2)),
+            "actualUnits": str(round(actual, 2)),
+            "remainingUnits": str(round(final_remaining, 2)),
+            "percentComplete": f"{pct:.2f}%",
+            "yesterdayValue": "",
+            "todayValue": "",
+        })
+    return {"message": "Manpower Details fetched from P6", "projectId": projectId, "rowCount": len(data), "totalManpower": len(data), "data": data, "source": "p6"}
 
 
 @router.get("/activities")
@@ -187,6 +229,7 @@ async def get_p6_activities(
 @router.post("/sync")
 async def sync_project(
     body: dict[str, Any],
+    background_tasks: BackgroundTasks,
     pool: PoolWrapper = Depends(get_db),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
@@ -194,8 +237,10 @@ async def sync_project(
     if not project_id:
         raise HTTPException(400, detail={"message": "Project ID required"})
 
-    # Placeholder – actual P6 REST sync would go here
-    return {"success": True, "message": "Sync completed successfully"}
+    # Trigger P6 sync as a background task
+    background_tasks.add_task(sync_data, target_project_id=project_id, full_sync=False, pool=pool)
+    
+    return {"success": True, "message": f"Sync started for project {project_id}. This may take a few minutes."}
 
 
 @router.get("/projects")
@@ -311,12 +356,15 @@ async def get_project_resources(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     """Get resources assigned to a project."""
+    # Filter for MT (Material/Machine) resources only for the Resources/Machine tab
     rows = await pool.fetch("""
         SELECT DISTINCT sra.resource_object_id as object_id, sra.resource_name as name,
                sra.resource_type, sa.uom as "UnitOfMeasure"
         FROM solar_resource_assignments sra
         JOIN solar_activities sa ON sra.activity_object_id = sa.object_id
         WHERE sra.project_object_id = $1
+          AND (UPPER(sra.resource_id) LIKE '%%MT%%' OR sra.resource_type = 'Material')
+          AND UPPER(sra.resource_id) NOT LIKE '%%NL%%'
     """, project_id)
     
     return {

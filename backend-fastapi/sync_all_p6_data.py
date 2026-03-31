@@ -23,7 +23,8 @@ import sys
 import os
 import httpx
 import re
-from datetime import datetime, timezone
+import logging
+from datetime import datetime, timezone, timedelta
 
 from app.database import create_pool
 from app.services.p6_token_service import get_valid_p6_token, get_http_client
@@ -50,6 +51,9 @@ ACTIVITY_FIELDS = ",".join([
     "PlannedStartDate", "PlannedFinishDate",
     "StartDate", "FinishDate",
     "BaselineStartDate", "BaselineFinishDate",
+    "Baseline1StartDate", "Baseline1FinishDate",
+    "Baseline2StartDate", "Baseline2FinishDate",
+    "Baseline3StartDate", "Baseline3FinishDate",
     "ActualStartDate", "ActualFinishDate",
     "PercentComplete", "PhysicalPercentComplete",
     "PlannedDuration", "RemainingDuration", "ActualDuration",
@@ -88,9 +92,17 @@ def parse_percent(v):
     except (ValueError, TypeError):
         return None
 
+logger = logging.getLogger("adani-flow.sync")
+
+# Define IST: UTC + 5:30
+IST = timezone(timedelta(hours=5, minutes=30))
+
 def log(msg):
-    """Print with flush for unbuffered output."""
-    print(msg, flush=True)
+    """Print with IST timestamp and log to adani-flow.sync."""
+    now_ist = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
+    formatted_msg = f"[{now_ist}] {msg}"
+    print(formatted_msg, flush=True)
+    logger.info(msg)
 
 async def fetch_all_retry(client, url, headers, label=""):
     """Fetch all data from a P6 endpoint (P6 EPPM ignores pagination params in many cases)."""
@@ -137,6 +149,12 @@ CREATE TABLE IF NOT EXISTS solar_activities (
     finish_date         TIMESTAMPTZ,
     baseline_start      TIMESTAMPTZ,
     baseline_finish     TIMESTAMPTZ,
+    baseline1_start     TIMESTAMPTZ,
+    baseline1_finish    TIMESTAMPTZ,
+    baseline2_start     TIMESTAMPTZ,
+    baseline2_finish    TIMESTAMPTZ,
+    baseline3_start     TIMESTAMPTZ,
+    baseline3_finish    TIMESTAMPTZ,
     actual_start        TIMESTAMPTZ,
     actual_finish       TIMESTAMPTZ,
     percent_complete    DECIMAL(5,2),
@@ -205,12 +223,19 @@ CREATE INDEX IF NOT EXISTS idx_solar_ra_project ON solar_resource_assignments(pr
 
 # ─── Main Sync ─────────────────────────────────────────────────────
 
-async def sync_data(target_project_id=None):
+async def sync_data(target_project_id=None, full_sync=False, pool=None):
+    log(f"Starting sync process (target_project_id={target_project_id}, full_sync={full_sync})")
+    should_close_pool = False
+    sync_now_ist = datetime.now(IST)
+    
     log("Obtaining P6 token...")
     token = await get_valid_p6_token()
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
-    pool = await create_pool()
+    if not pool:
+        log("No database pool provided, creating one...")
+        pool = await create_pool()
+        should_close_pool = True
 
     # 1. Create new tables
     log("Creating Solar tables...")
@@ -222,9 +247,34 @@ async def sync_data(target_project_id=None):
             except Exception as e:
                 log(f"  Table creation note: {e}")
 
-    # 2. Clear old data? NO - User requested incremental sync
-    log("Starting incremental sync (upserting changed records)...")
-    # Truncate removed to avoid data loss on targeted syncs
+    # 1.5 Ensure columns exist (Handling table evolution)
+    log("Checking for missing columns...")
+    evolution_queries = [
+        "ALTER TABLE solar_activities ADD COLUMN IF NOT EXISTS block_capacity DECIMAL(10,2) DEFAULT 12.5",
+        "ALTER TABLE solar_activities ADD COLUMN IF NOT EXISTS spv_no VARCHAR(100)",
+        "ALTER TABLE solar_activities ADD COLUMN IF NOT EXISTS plot VARCHAR(255)",
+        "ALTER TABLE solar_activities ADD COLUMN IF NOT EXISTS new_block_nom VARCHAR(255)",
+        "ALTER TABLE solar_activities ADD COLUMN IF NOT EXISTS remarks TEXT",
+        "ALTER TABLE solar_activities ADD COLUMN IF NOT EXISTS last_sync_at TIMESTAMPTZ DEFAULT NOW()",
+        "ALTER TABLE solar_activities ADD COLUMN IF NOT EXISTS baseline1_start TIMESTAMPTZ",
+        "ALTER TABLE solar_activities ADD COLUMN IF NOT EXISTS baseline1_finish TIMESTAMPTZ",
+        "ALTER TABLE solar_activities ADD COLUMN IF NOT EXISTS baseline2_start TIMESTAMPTZ",
+        "ALTER TABLE solar_activities ADD COLUMN IF NOT EXISTS baseline2_finish TIMESTAMPTZ",
+        "ALTER TABLE solar_activities ADD COLUMN IF NOT EXISTS baseline3_start TIMESTAMPTZ",
+        "ALTER TABLE solar_activities ADD COLUMN IF NOT EXISTS baseline3_finish TIMESTAMPTZ"
+    ]
+    for eq in evolution_queries:
+        try:
+            await pool.execute(eq)
+        except Exception as e:
+            log(f"  Migration note: {e}")
+
+    # 2. Clear old data?
+    if full_sync:
+        log("FULL SYNC MODE: Clearing existing data from tables...")
+        await pool.execute("TRUNCATE TABLE p6_projects, solar_activities, solar_wbs, solar_resource_assignments CASCADE")
+    else:
+        log("INCREMENTAL SYNC MODE: Upserting changed records only...")
 
     async with get_http_client(timeout=120.0) as client:
 
@@ -245,15 +295,16 @@ async def sync_data(target_project_id=None):
             await pool.execute("""
                 INSERT INTO p6_projects ("ObjectId", "Id", "Name", "Status", "StartDate", "FinishDate",
                                          "PlannedStartDate", "Description", "DataDate", "LastSyncAt")
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 ON CONFLICT ("ObjectId") DO UPDATE SET
                     "Id"=$2, "Name"=$3, "Status"=$4, "StartDate"=$5, "FinishDate"=$6,
-                    "PlannedStartDate"=$7, "Description"=$8, "DataDate"=$9, "LastSyncAt"=NOW()
+                    "PlannedStartDate"=$7, "Description"=$8, "DataDate"=$9, "LastSyncAt"=$10
             """,
                 int(p["ObjectId"]), p.get("Id", ""), p.get("Name", ""),
                 p.get("Status", ""), parse_date(p.get("StartDate")),
                 parse_date(p.get("FinishDate")), parse_date(p.get("PlannedStartDate")),
                 p.get("Description"), parse_date(p.get("DataDate")),
+                sync_now_ist
             )
         log(f"  OK {len(projects)} projects saved")
 
@@ -326,9 +377,10 @@ async def sync_data(target_project_id=None):
                     res_id = ra.get("ResourceId", "").upper()
                     res_type = ra.get("ResourceType", "")
                     
-                    # USER REQUIREMENT: Take material resource ONLY, not all sum.
-                    # Material resources usually have Type="Material" or ID contains "-MT" (Material)
-                    is_material = (res_type == "Material") or ("-MT" in res_id)
+                    # USER REQUIREMENT: Take material (MT) resource only.
+                    # Material resources usually have Type="Material" or ID contains "MT"
+                    # We explicitly exclude Non-Labor (NL) and Labor (MP) is naturally excluded.
+                    is_material = (res_type == "Material" or "MT" in res_id) and ("NL" not in res_id) and ("MP" not in res_id)
                     
                     if not is_material:
                         continue
@@ -484,7 +536,11 @@ async def sync_data(target_project_id=None):
                             object_id, activity_id, name, status, activity_type,
                             project_object_id, wbs_object_id, wbs_name,
                             planned_start, planned_finish, start_date, finish_date,
-                            baseline_start, baseline_finish, actual_start, actual_finish,
+                            baseline_start, baseline_finish, 
+                            baseline1_start, baseline1_finish,
+                            baseline2_start, baseline2_finish,
+                            baseline3_start, baseline3_finish,
+                            actual_start, actual_finish,
                             percent_complete, physical_percent_complete,
                             planned_duration, remaining_duration, actual_duration,
                             primary_resource,
@@ -493,27 +549,31 @@ async def sync_data(target_project_id=None):
                             block_capacity, spv_no, plot, new_block_nom, remarks, last_sync_at
                         ) VALUES (
                             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-                            $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,
-                            12.5, $32, $33, $34, $35, NOW()
+                            $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,
+                            $34, $35, $36, $37, 12.5, $38, $39, $40, $41, $42
                         )
                         ON CONFLICT (object_id) DO UPDATE SET
                             activity_id=$2, name=$3, status=$4, activity_type=$5,
                             project_object_id=$6, wbs_object_id=$7, wbs_name=$8,
                             planned_start=$9, planned_finish=$10, start_date=$11, finish_date=$12,
-                            baseline_start=$13, baseline_finish=$14, actual_start=$15, actual_finish=$16,
-                            percent_complete=$17, physical_percent_complete=$18,
-                            planned_duration=$19, remaining_duration=$20, actual_duration=$21,
-                            primary_resource=$22,
-                            total_quantity=$23, balance=$24, cumulative=$25, uom=$26, 
-                            priority=COALESCE(solar_activities.priority, $27), 
-                            scope=$28, 
-                            weightage=COALESCE(solar_activities.weightage, $29),
-                            phase=COALESCE(solar_activities.phase, $30), 
-                            discipline=$31,
-                            spv_no=$32, plot=$33, 
-                            new_block_nom=COALESCE(solar_activities.new_block_nom, $34), 
-                            remarks=COALESCE(solar_activities.remarks, $35),
-                            last_sync_at=NOW()
+                            baseline_start=$13, baseline_finish=$14, 
+                            baseline1_start=$15, baseline1_finish=$16,
+                            baseline2_start=$17, baseline2_finish=$18,
+                            baseline3_start=$19, baseline3_finish=$20,
+                            actual_start=$21, actual_finish=$22,
+                            percent_complete=$23, physical_percent_complete=$24,
+                            planned_duration=$25, remaining_duration=$26, actual_duration=$27,
+                            primary_resource=$28,
+                            total_quantity=$29, balance=$30, cumulative=$31, uom=$32, 
+                            priority=COALESCE(solar_activities.priority, $33), 
+                            scope=$34, 
+                            weightage=COALESCE(solar_activities.weightage, $35),
+                            phase=COALESCE(solar_activities.phase, $36), 
+                            discipline=$37,
+                            spv_no=$38, plot=$39, 
+                            new_block_nom=COALESCE(solar_activities.new_block_nom, $40), 
+                            remarks=COALESCE(solar_activities.remarks, $41),
+                            last_sync_at=$42
                     """,
                         oid,
                         a.get("Id", ""),
@@ -529,6 +589,12 @@ async def sync_data(target_project_id=None):
                         parse_date(a.get("FinishDate")),
                         parse_date(a.get("BaselineStartDate")),
                         parse_date(a.get("BaselineFinishDate")),
+                        parse_date(a.get("Baseline1StartDate")),
+                        parse_date(a.get("Baseline1FinishDate")),
+                        parse_date(a.get("Baseline2StartDate")),
+                        parse_date(a.get("Baseline2FinishDate")),
+                        parse_date(a.get("Baseline3StartDate")),
+                        parse_date(a.get("Baseline3FinishDate")),
                         parse_date(a.get("ActualStartDate")),
                         parse_date(a.get("ActualFinishDate")),
                         parse_percent(a.get("PercentComplete")),
@@ -550,6 +616,7 @@ async def sync_data(target_project_id=None):
                         plot,
                         new_block_nom,
                         None, # remarks is manual entry, preserve via COALESCE
+                        sync_now_ist
                     )
                 total_acts += len(acts)
 
@@ -594,10 +661,22 @@ async def sync_data(target_project_id=None):
     log(f"  Solar Res Assignments:{total_ras}")
     log(f"{'='*60}")
 
-    await pool.close()
+    log(f"OK SYNC COMPLETE: {target_project_id if target_project_id else 'All'}")
+
+    if should_close_pool and pool:
+        await pool.close()
+        log("Database pool closed.")
 
 
 if __name__ == "__main__":
     import sys
-    target_id = sys.argv[1] if len(sys.argv) > 1 else None
-    asyncio.run(sync_data(target_id))
+    target_id = None
+    is_full = False
+    
+    for arg in sys.argv[1:]:
+        if arg == "--full" or arg == "/full":
+            is_full = True
+        else:
+            target_id = arg
+            
+    asyncio.run(sync_data(target_id, is_full))

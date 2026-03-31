@@ -7,6 +7,11 @@ interface ProjectsHeaderProps {
   userRole?: string;
   searchTerm: string;
   onSearchChange: (term: string) => void;
+  typeFilter: string;
+  onTypeFilterChange: (type: string) => void;
+  yearFilter: string;
+  onYearFilterChange: (year: string) => void;
+  availableYears: string[];
   onAddUserClick?: () => void;
 }
 
@@ -14,6 +19,11 @@ export const ProjectsHeader: React.FC<ProjectsHeaderProps> = ({
   userRole,
   searchTerm,
   onSearchChange,
+  typeFilter,
+  onTypeFilterChange,
+  yearFilter,
+  onYearFilterChange,
+  availableYears,
   onAddUserClick
 }) => {
   // Show Add User button for PMAG and Site PM roles
@@ -49,17 +59,49 @@ export const ProjectsHeader: React.FC<ProjectsHeaderProps> = ({
         )}
       </div>
 
-      {/* Search Bar */}
-      <div className="mb-6">
-        <div className="relative max-w-md">
+      {/* Filters Bar */}
+      <div className="flex flex-col md:flex-row gap-4 mb-6 pt-2 pb-2">
+        {/* Search Bar */}
+        <div className="relative flex-grow max-w-md">
           <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
           <input
             type="text"
-            placeholder="Search projects..."
-            className="pl-10 w-full p-2 border rounded-md bg-background"
+            placeholder="Search projects by name..."
+            className="pl-10 w-full p-2 border rounded-md bg-background focus:ring-2 focus:ring-primary/20 transition-all outline-none"
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
           />
+        </div>
+
+        {/* Year Filter */}
+        <div className="flex items-center gap-2">
+           <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Year:</span>
+           <select 
+             className="p-2 border rounded-md bg-background text-sm min-w-[120px] focus:ring-2 focus:ring-primary/20 outline-none"
+             value={yearFilter}
+             onChange={(e) => onYearFilterChange(e.target.value)}
+           >
+             <option value="ALL">All Years</option>
+             {availableYears.map(year => (
+               <option key={year} value={year}>{year}</option>
+             ))}
+           </select>
+        </div>
+
+        {/* Type Filter */}
+        <div className="flex items-center gap-2">
+           <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Type:</span>
+           <select 
+             className="p-2 border rounded-md bg-background text-sm min-w-[120px] focus:ring-2 focus:ring-primary/20 outline-none"
+             value={typeFilter}
+             onChange={(e) => onTypeFilterChange(e.target.value)}
+           >
+             <option value="ALL">All Types</option>
+             <option value="solar">Solar</option>
+             <option value="wind">Wind</option>
+             <option value="pss">PSS</option>
+             <option value="other">Other</option>
+           </select>
         </div>
       </div>
     </motion.div>

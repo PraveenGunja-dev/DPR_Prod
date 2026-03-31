@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Search, RefreshCw, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import { fetchAllEntries } from '@/services/sheetEntriesService';
+import { EntryCard } from '@/components/shared/EntryCard';
 import { toast } from 'sonner';
 
 interface SuperAdminSheetEntriesProps {
@@ -15,7 +16,7 @@ interface SuperAdminSheetEntriesProps {
 export const SuperAdminSheetEntries = ({ projects }: SuperAdminSheetEntriesProps) => {
     const [entries, setEntries] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
-    const [statusFilter, setStatusFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState('final_approved');
     const [projectFilter, setProjectFilter] = useState('all');
     const [sheetTypeFilter, setSheetTypeFilter] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
@@ -258,9 +259,12 @@ export const SuperAdminSheetEntries = ({ projects }: SuperAdminSheetEntriesProps
 
             {/* Detail Modal */}
             <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogContent 
+                    className="max-w-[95vw] w-[95vw] max-h-[95vh] overflow-y-auto p-4 md:p-6"
+                    style={{ width: '95vw' }}
+                >
                     <DialogHeader>
-                        <DialogTitle>Sheet Entry Details</DialogTitle>
+                        <DialogTitle className="text-xl">Sheet Entry Details</DialogTitle>
                     </DialogHeader>
                     {selectedEntry && (
                         <div className="space-y-4">
@@ -292,58 +296,16 @@ export const SuperAdminSheetEntries = ({ projects }: SuperAdminSheetEntriesProps
                                 </div>
                             </div>
 
-                            {/* Sheet Data */}
-                            {selectedEntry.data_json && (
-                                <div className="border rounded-lg p-4">
-                                    <h3 className="font-semibold mb-3">Sheet Data</h3>
-                                    {(() => {
-                                        const data = typeof selectedEntry.data_json === 'string'
-                                            ? JSON.parse(selectedEntry.data_json)
-                                            : selectedEntry.data_json;
-
-                                        return (
-                                            <>
-                                                {data?.staticHeader && (
-                                                    <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded mb-4">
-                                                        <p className="text-sm"><strong>Project:</strong> {data.staticHeader.projectInfo}</p>
-                                                        <p className="text-sm"><strong>Reporting Date:</strong> {data.staticHeader.reportingDate}</p>
-                                                        {data.staticHeader.progressDate && (
-                                                            <p className="text-sm"><strong>Progress Date:</strong> {data.staticHeader.progressDate}</p>
-                                                        )}
-                                                    </div>
-                                                )}
-
-                                                {data?.rows && data.rows.length > 0 && (
-                                                    <div className="overflow-x-auto">
-                                                        <table className="w-full border-collapse">
-                                                            <thead>
-                                                                <tr className="bg-muted">
-                                                                    {Object.keys(data.rows[0]).map((key) => (
-                                                                        <th key={key} className="border px-3 py-2 text-left text-xs font-semibold">
-                                                                            {key.replace(/([A-Z])/g, ' $1').trim().toUpperCase()}
-                                                                        </th>
-                                                                    ))}
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {data.rows.map((row: any, rowIndex: number) => (
-                                                                    <tr key={rowIndex} className="hover:bg-muted/50">
-                                                                        {Object.values(row).map((value: any, colIndex: number) => (
-                                                                            <td key={`${rowIndex}-${colIndex}`} className="border px-3 py-2 text-sm">
-                                                                                {value || '-'}
-                                                                            </td>
-                                                                        ))}
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                )}
-                                            </>
-                                        );
-                                    })()}
-                                </div>
-                            )}
+                            {/* Professional Entry Representation (Matches Supervisor View) */}
+                            <div className="border rounded-lg overflow-hidden bg-card">
+                                <EntryCard 
+                                    entry={selectedEntry}
+                                    isExpanded={true}
+                                    onToggleExpand={() => {}}
+                                    sheetType={selectedEntry.sheet_type}
+                                    projects={projects}
+                                />
+                            </div>
 
                             <div className="flex justify-end">
                                 <Button onClick={() => setShowDetailModal(false)}>Close</Button>

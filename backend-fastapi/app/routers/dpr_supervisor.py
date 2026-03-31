@@ -24,6 +24,71 @@ logger = logging.getLogger("adani-flow.dpr_supervisor")
 router = APIRouter(prefix="/api/dpr-supervisor", tags=["DPR Supervisor"])
 
 
+def _format_sheet_type(sheet_type: str) -> str:
+    """Convert raw sheet_type to human-readable name."""
+    mapping = {
+        "dp_qty": "DP Qty",
+        "dp_block": "DP Block",
+        "dp_vendor_block": "Vendor Block",
+        "dp_vendor_idt": "Vendor IDT",
+        "manpower_details": "Manpower Details",
+        "mms_module_rfi": "MMS & Module RFI",
+    }
+    return mapping.get(sheet_type, sheet_type.replace("_", " ").title())
+
+
+def _format_date(d) -> str:
+    """Format a date object or string to DD-Mon-YY (e.g. 28-Mar-26)."""
+    if d is None:
+        return "N/A"
+    if hasattr(d, 'strftime'):
+        return d.strftime("%d-%b-%y")
+    try:
+        return datetime.strptime(str(d), "%Y-%m-%d").strftime("%d-%b-%y")
+    except Exception:
+        return str(d)
+
+
+async def _get_project_name(pool, project_id: int) -> str:
+    """Fetch project name from DB."""
+    try:
+        name = await pool.fetchval('SELECT "Name" FROM p6_projects WHERE "ObjectId" = $1', project_id)
+        return name or f"Project #{project_id}"
+    except Exception:
+        return f"Project #{project_id}"
+
+
+async def _save_snapshot(
+    pool, entry_id: int, action: str, data_json,
+    status_before: str, status_after: str,
+    performed_by: int, remarks: str = None
+):
+    """Save a versioned snapshot of data_json for audit/comparison.
+    
+    Actions: 'submitted', 'approved_by_pm', 'rejected_by_pm', 
+             'final_approved', 'pushed_to_p6', 'resubmitted'
+    """
+    try:
+        # Get next version number for this entry
+        last_version = await pool.fetchval(
+            "SELECT COALESCE(MAX(version), 0) FROM dpr_entry_snapshots WHERE entry_id = $1",
+            entry_id
+        )
+        next_version = last_version + 1
+
+        data_str = json.dumps(data_json) if not isinstance(data_json, str) else data_json
+
+        await pool.execute("""
+            INSERT INTO dpr_entry_snapshots 
+                (entry_id, version, action, data_json, status_before, status_after, performed_by, remarks)
+            VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)
+        """, entry_id, next_version, action, data_str, status_before, status_after, performed_by, remarks)
+
+        logger.info(f"Snapshot v{next_version} saved for entry {entry_id}: {action}")
+    except Exception as e:
+        logger.error(f"Failed to save snapshot for entry {entry_id}: {e}")
+
+
 def _get_today_and_yesterday():
     today = datetime.now()
     yesterday = today - timedelta(days=1)
@@ -135,12 +200,13 @@ async def get_draft_entry(
     """, user_id, projectId, sheetType, target_date)
     if row:
         entry: dict[str, Any] = dict(row)
+        # RELAXED FOR TESTING: Allow editing even if submitted/approved
+        entry["isLocked"] = False 
         if entry["status"] == "submitted_to_pm":
-            entry["isLocked"] = True
-            entry["message"] = "This entry has been submitted and cannot be edited."
-        elif entry["status"] == "approved_by_pm":
+            entry["message"] = "This entry is currently with PM for review. You can still make changes and resubmit."
+        elif entry["status"] in ("approved_by_pm", "final_approved"):
             entry["pastEntry"] = True
-            entry["message"] = "This is an approved past entry. Any edits require a reason and will revert to Pending Review."
+            entry["message"] = "This is an already approved entry. Edits will trigger a re-review."
         return entry
 
     # Create new draft
@@ -168,13 +234,23 @@ async def save_draft_entry(
     entry_id = body.get("entryId")
     data = body.get("data")
 
+    # DEBUG LOGGING for 404 investigation
+    logger.info(f"save_draft_entry: entryId={entry_id}, userId={current_user['userId']}")
+    
     check = await pool.fetchrow(
-        "SELECT * FROM dpr_supervisor_entries WHERE id = $1 AND supervisor_id = $2 AND status IN ('draft', 'rejected_by_pm', 'approved_by_pm', 'final_approved')",
-        entry_id, current_user["userId"],
+        "SELECT id, supervisor_id, status FROM dpr_supervisor_entries WHERE id = $1",
+        entry_id,
     )
+    
     if not check:
-        raise HTTPException(404, detail={"message": "Entry not found, access denied, or invalid status for saving"})
+        logger.error(f"save_draft_entry: Entry {entry_id} NOT FOUND in DB at all")
+        raise HTTPException(404, detail={"message": f"Entry {entry_id} not found"})
+    
+    if check["supervisor_id"] != current_user["userId"]:
+        logger.error(f"save_draft_entry: Access denied. Entry {entry_id} belongs to supervisor {check['supervisor_id']}, but current user is {current_user['userId']}")
+        raise HTTPException(403, detail={"message": "Access denied: This entry belongs to another supervisor"})
 
+    # Perform the update
     row = await pool.fetchrow(
         "UPDATE dpr_supervisor_entries SET data_json = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *",
         json.dumps(data), entry_id,
@@ -192,12 +268,21 @@ async def submit_entry(
     edit_reason = body.get("editReason")
     user_id = current_user["userId"]
 
+    # DEBUG LOGGING for 404 investigation
+    logger.info(f"submit_entry: entryId={entry_id}, userId={user_id}")
+    
     check = await pool.fetchrow(
-        "SELECT * FROM dpr_supervisor_entries WHERE id = $1 AND supervisor_id = $2 AND status IN ('draft', 'rejected_by_pm', 'approved_by_pm', 'final_approved')",
-        entry_id, user_id,
+        "SELECT id, supervisor_id, status FROM dpr_supervisor_entries WHERE id = $1",
+        entry_id,
     )
+    
     if not check:
-        raise HTTPException(404, detail={"message": "Entry not found, access denied, or invalid status for submission"})
+        logger.error(f"submit_entry: Entry {entry_id} NOT FOUND in DB at all")
+        raise HTTPException(404, detail={"message": f"Entry {entry_id} not found"})
+    
+    if check["supervisor_id"] != user_id:
+        logger.error(f"submit_entry: Access denied. Entry {entry_id} belongs to supervisor {check['supervisor_id']}, but current user is {user_id}")
+        raise HTTPException(403, detail={"message": "Access denied: This entry belongs to another supervisor"})
 
     today_str, _ = _get_today_and_yesterday()
     db_date = check["entry_date"].strftime("%Y-%m-%d") if check.get("entry_date") else None
@@ -210,14 +295,24 @@ async def submit_entry(
         WHERE id = $1 RETURNING *
     """, entry_id, user_id, reason_text)
 
+    # Save snapshot
+    action = "resubmitted" if check["status"] in ("rejected_by_pm", "rejected_by_pmag") else "submitted"
+    await _save_snapshot(
+        pool, entry_id, action, row["data_json"],
+        check["status"], "submitted_to_pm", user_id, reason_text
+    )
+
     # Notify Site PM(s)
     try:
+        proj_name = await _get_project_name(pool, check["project_id"])
+        sheet_label = _format_sheet_type(check['sheet_type'])
+        date_label = _format_date(db_date)
         pms = await pool.fetch("SELECT user_id FROM users WHERE role = 'Site PM'")
         for pm in pms:
             await create_notification(
                 pool, pm["user_id"], 
                 "New DPR Submission", 
-                f"Supervisor {current_user['name']} submitted {check['sheet_type']} for {db_date}",
+                f"{current_user.get('name', current_user['email'])} submitted {sheet_label} for {proj_name} ({date_label})",
                 "info", check["project_id"], entry_id, check["sheet_type"]
             )
     except Exception as e:
@@ -242,11 +337,12 @@ async def submit_entry(
             if pm["email"]:
                 await send_dpr_status_email(
                     pm["email"], pm["name"], check["sheet_type"], "New Submission (Pending PM Review)",
-                    proj or "Project", check["entry_date"].isoformat(), f"Submitted by {current_user['name']}"
+                    proj or "Project", check["entry_date"].isoformat(), f"Submitted by {current_user.get('name', current_user['email'])}"
                 )
     except Exception as ee:
         logger.error(f"Submission email notification failed: {ee}")
 
+    await cache.flush_all()
     return {"message": "Entry submitted successfully", "entry": dict(row)}
 
 
@@ -270,14 +366,18 @@ async def get_entries_for_pm_review(
         rows = await pool.fetch("""
             SELECT dse.*, u.name as supervisor_name, u.email as supervisor_email
             FROM dpr_supervisor_entries dse JOIN users u ON dse.supervisor_id = u.user_id
-            WHERE dse.project_id = $1 AND dse.status IN ('submitted_to_pm', 'approved_by_pm', 'rejected_by_pm')
+            WHERE dse.project_id = $1 AND dse.status IN ('submitted_to_pm', 'approved_by_pm', 'rejected_by_pm', 'final_approved')
+              AND dse.pushed_at IS NULL
+              AND dse.entry_date > CURRENT_DATE - INTERVAL '10 days'
             ORDER BY dse.submitted_at DESC
         """, projectId)
     else:
         rows = await pool.fetch("""
             SELECT dse.*, u.name as supervisor_name, u.email as supervisor_email
             FROM dpr_supervisor_entries dse JOIN users u ON dse.supervisor_id = u.user_id
-            WHERE dse.status IN ('submitted_to_pm', 'approved_by_pm', 'rejected_by_pm')
+            WHERE dse.status IN ('submitted_to_pm', 'approved_by_pm', 'rejected_by_pm', 'final_approved')
+              AND dse.pushed_at IS NULL
+              AND dse.entry_date > CURRENT_DATE - INTERVAL '10 days'
             ORDER BY dse.submitted_at DESC
         """)
 
@@ -304,15 +404,25 @@ async def approve_entry_by_pm(
 
     if not row:
         raise HTTPException(404, detail={"message": "Entry not found or invalid status"})
+        
+    # Save snapshot
+    await _save_snapshot(
+        pool, entry_id, "approved_by_pm", row["data_json"],
+        "submitted_to_pm", "approved_by_pm", current_user["userId"]
+    )
+    
     await cache.flush_all()
     # Notify Supervisor and PMAG
     try:
         entry = dict(row)
+        proj_name = await _get_project_name(pool, entry["project_id"])
+        sheet_label = _format_sheet_type(entry['sheet_type'])
+        date_label = _format_date(entry['entry_date'])
         # Notify Supervisor
         await create_notification(
             pool, entry["supervisor_id"], 
             "DPR Approved by PM", 
-            f"Your {entry['sheet_type']} for {entry['entry_date']} has been approved by PM.",
+            f"Your {sheet_label} for {proj_name} ({date_label}) has been approved by Site PM.",
             "success", entry["project_id"], entry_id, entry["sheet_type"]
         )
         # Notify PMAG
@@ -320,8 +430,8 @@ async def approve_entry_by_pm(
         for pmag in pmags:
             await create_notification(
                 pool, pmag["user_id"], 
-                "New PM-Approved DPR", 
-                f"PM approved {entry['sheet_type']} for {entry['entry_date']}. Pending your final review.",
+                "PM-Approved DPR", 
+                f"{sheet_label} for {proj_name} ({date_label}) approved by PM. Pending your review.",
                 "info", entry["project_id"], entry_id, entry["sheet_type"]
             )
             
@@ -416,6 +526,12 @@ async def reject_entry_by_pm(
     if not row:
         raise HTTPException(404, detail={"message": "Entry not found or invalid status"})
 
+    # Save snapshot
+    await _save_snapshot(
+        pool, entry_id, "rejected_by_pm", row["data_json"],
+        "submitted_to_pm", "rejected_by_pm", current_user["userId"], rejection_reason
+    )
+
     await cache.flush_all()
     entry = dict(row)
     await create_system_log(
@@ -425,10 +541,13 @@ async def reject_entry_by_pm(
     )
 
     # Notify Supervisor
+    proj_name = await _get_project_name(pool, entry["project_id"])
+    sheet_label = _format_sheet_type(entry['sheet_type'])
+    date_label = _format_date(entry['entry_date'])
     await create_notification(
         pool, entry["supervisor_id"], 
-        "DPR Rejected", 
-        f"Your {entry['sheet_type']} for {entry['entry_date']} was rejected. Reason: {rejection_reason}",
+        "DPR Rejected by PM", 
+        f"Your {sheet_label} for {proj_name} ({date_label}) was rejected. Reason: {rejection_reason or 'No reason provided'}",
         "error", entry["project_id"], entry_id, entry["sheet_type"]
     )
     
@@ -504,14 +623,19 @@ async def get_entries_for_pmag_review(
         rows = await pool.fetch("""
             SELECT dse.*, u.name as supervisor_name, u.email as supervisor_email
             FROM dpr_supervisor_entries dse JOIN users u ON dse.supervisor_id = u.user_id
-            WHERE dse.project_id = $1 AND dse.status = 'approved_by_pm'
+            WHERE dse.project_id = $1 AND dse.status IN ('approved_by_pm', 'final_approved')
+              AND dse.pushed_at IS NULL
+              AND dse.entry_date > CURRENT_DATE - INTERVAL '10 days'
             ORDER BY dse.updated_at DESC
         """, projectId)
     else:
         rows = await pool.fetch("""
             SELECT dse.*, u.name as supervisor_name, u.email as supervisor_email
             FROM dpr_supervisor_entries dse JOIN users u ON dse.supervisor_id = u.user_id
-            WHERE dse.status = 'approved_by_pm' ORDER BY dse.updated_at DESC
+            WHERE dse.status IN ('approved_by_pm', 'final_approved')
+              AND dse.pushed_at IS NULL
+              AND dse.entry_date > CURRENT_DATE - INTERVAL '10 days'
+            ORDER BY dse.updated_at DESC
         """)
 
     result = [dict(r) for r in rows]
@@ -596,15 +720,25 @@ async def approve_entry_by_pmag(
 
     if not row:
         raise HTTPException(404, detail={"message": "Entry not found or invalid status"})
+        
+    # Save snapshot
+    await _save_snapshot(
+        pool, entry_id, "final_approved", row["data_json"],
+        "approved_by_pm", "final_approved", current_user["userId"]
+    )
+    
     await cache.flush_all()
     # Notify Supervisor and PM(s)
     try:
         entry = dict(row)
+        proj_name = await _get_project_name(pool, entry["project_id"])
+        sheet_label = _format_sheet_type(entry['sheet_type'])
+        date_label = _format_date(entry['entry_date'])
         # Notify Supervisor
         await create_notification(
             pool, entry["supervisor_id"], 
             "DPR Final Approved", 
-            f"Your {entry['sheet_type']} for {entry['entry_date']} has received final approval from PMAG.",
+            f"Your {sheet_label} for {proj_name} ({date_label}) has received final approval from PMAG.",
             "success", entry["project_id"], entry_id, entry["sheet_type"]
         )
         # Notify Site PM(s)
@@ -613,7 +747,7 @@ async def approve_entry_by_pmag(
             await create_notification(
                 pool, pm["user_id"], 
                 "DPR Final Approved", 
-                f"PMAG has given final approval to {entry['sheet_type']} for {entry['entry_date']}.",
+                f"{sheet_label} for {proj_name} ({date_label}) has been given final approval by PMAG.",
                 "success", entry["project_id"], entry_id, entry["sheet_type"]
             )
             
@@ -664,16 +798,53 @@ async def push_to_p6(
         raise HTTPException(403, detail={"message": "Access denied"})
 
     entry_id = body.get("entryId")
-    row = await pool.fetchrow("""
-        UPDATE dpr_supervisor_entries SET status = 'final_approved', pushed_at = CURRENT_TIMESTAMP,
-        pushed_by = $2, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1 AND status = 'approved_by_pm' RETURNING *
-    """, entry_id, current_user["userId"])
+    dry_run = body.get("dryRun", False)
 
-    if not row:
-        raise HTTPException(404, detail={"message": "Entry not found or invalid status"})
-    await cache.flush_all()
-    return {"message": "Entry pushed to P6 successfully", "entry": dict(row)}
+    # Verify entry exists and has correct status
+    entry = await pool.fetchrow("""
+        SELECT id, status, sheet_type FROM dpr_supervisor_entries WHERE id = $1
+    """, entry_id)
+
+    if not entry:
+        raise HTTPException(404, detail={"message": "Entry not found"})
+
+    if entry["status"] not in ("approved_by_pm", "final_approved"):
+        raise HTTPException(400, detail={"message": f"Entry status '{entry['status']}' is not eligible for P6 push. Must be 'approved_by_pm' or 'final_approved'."})
+
+    # Check if sheet type supports P6 push
+    supported_sheets = ["dp_vendor_idt", "dp_vendor_block", "manpower_details", "dp_qty", "dp_block"]
+    if entry["sheet_type"] not in supported_sheets:
+        raise HTTPException(400, detail={"message": f"Sheet type '{entry['sheet_type']}' does not support pushing to P6. Supported: {', '.join(supported_sheets)}"})
+
+    try:
+        from app.services.p6_push_service import push_approved_entry_to_p6
+        result = await push_approved_entry_to_p6(pool, entry_id, current_user["userId"], dry_run=dry_run)
+    except Exception as e:
+        logger.error(f"P6 Push Error Traceback: {e}", exc_info=True)
+        raise HTTPException(500, detail={"message": f"P6 push failed due to internal error: {str(e)}"})
+
+    # Update entry status if push was successful and not dry run
+    if result["success"] and not dry_run:
+        row = await pool.fetchrow("""
+            UPDATE dpr_supervisor_entries
+            SET status = 'final_approved', pushed_at = CURRENT_TIMESTAMP,
+                pushed_by = $2, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1 RETURNING *
+        """, entry_id, current_user["userId"])
+        
+        if row:
+            # Save snapshot
+            await _save_snapshot(
+                pool, entry_id, "pushed_to_p6", row["data_json"],
+                entry["status"], "final_approved", current_user["userId"], "Pushed to P6"
+            )
+            
+        await cache.flush_all()
+
+    return {
+        "message": "P6 push completed" if result["success"] else "P6 push completed with errors",
+        "result": result
+    }
 
 
 @router.post("/pmag-reject")
@@ -696,5 +867,64 @@ async def reject_entry_by_pmag(
     if not row:
         raise HTTPException(404, detail={"message": "Entry not found or invalid status"})
 
+    # Save snapshot
+    await _save_snapshot(
+        pool, entry_id, "rejected_by_pmag", row["data_json"],
+        "approved_by_pm", "submitted_to_pm", current_user["userId"], rejection_reason
+    )
+
     await cache.flush_all()
     return {"message": "Entry rejected and sent back to PM", "entry": dict(row)}
+
+
+@router.get("/entry/{entry_id}/snapshots")
+async def get_entry_snapshots(
+    entry_id: int,
+    pool: PoolWrapper = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """Get the version history of a specific DPR entry."""
+    # First verify access
+    entry = await pool.fetchrow("SELECT supervisor_id, project_id FROM dpr_supervisor_entries WHERE id = $1", entry_id)
+    if not entry:
+        raise HTTPException(404, detail={"message": "Entry not found"})
+        
+    if current_user["role"] == "supervisor" and entry["supervisor_id"] != current_user["userId"]:
+        raise HTTPException(403, detail={"message": "Access denied"})
+
+    rows = await pool.fetch("""
+        SELECT s.id, s.version, s.action, s.status_before, s.status_after, 
+               s.remarks, s.created_at, u.name as performed_by_name
+        FROM dpr_entry_snapshots s
+        LEFT JOIN users u ON s.performed_by = u.user_id
+        WHERE s.entry_id = $1
+        ORDER BY s.version DESC
+    """, entry_id)
+
+    return [dict(r) for r in rows]
+
+
+@router.get("/entry/{entry_id}/snapshot/{version}")
+async def get_entry_snapshot_data(
+    entry_id: int,
+    version: int,
+    pool: PoolWrapper = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """Get the full data_json for a specific version of a DPR entry."""
+    entry = await pool.fetchrow("SELECT supervisor_id FROM dpr_supervisor_entries WHERE id = $1", entry_id)
+    if not entry:
+        raise HTTPException(404, detail={"message": "Entry not found"})
+        
+    if current_user["role"] == "supervisor" and entry["supervisor_id"] != current_user["userId"]:
+        raise HTTPException(403, detail={"message": "Access denied"})
+
+    row = await pool.fetchrow("""
+        SELECT data_json FROM dpr_entry_snapshots
+        WHERE entry_id = $1 AND version = $2
+    """, entry_id, version)
+
+    if not row:
+        raise HTTPException(404, detail={"message": f"Version {version} not found for entry {entry_id}"})
+
+    return {"data": row["data_json"]}

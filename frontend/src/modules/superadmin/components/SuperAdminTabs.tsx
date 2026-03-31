@@ -30,7 +30,7 @@ export const SuperAdminTabs: React.FC<SuperAdminTabsProps> = ({
   }, []);
 
   return (
-    <TabsList className="grid w-full grid-cols-8">
+    <TabsList className="flex w-full overflow-x-auto overflow-y-hidden justify-start h-auto p-1 bg-muted/50 scrollbar-hide">
       <TabsTrigger
         value="users"
         className="flex items-center gap-2"
@@ -105,4 +105,4 @@ export const SuperAdminTabs: React.FC<SuperAdminTabsProps> = ({
 };
 
 
-
+

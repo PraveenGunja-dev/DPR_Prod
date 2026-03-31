@@ -7,8 +7,30 @@ import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
+import { useAuth } from "@/modules/auth/contexts/AuthContext"
+import { useEffect } from "react"
+
 const Landing = () => {
   const navigate = useNavigate()
+  const { isAuthenticated, user, isLoading } = useAuth()
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (user && (user as any).Role === 'pending_approval') {
+      navigate("/access-pending");
+      return;
+    }
+
+    if (isAuthenticated && user) {
+      if ((user as any).Role === 'Super Admin' || (user as any).role === 'Super Admin') {
+        navigate("/superadmin");
+      } else {
+        navigate("/projects");
+      }
+    }
+  }, [isAuthenticated, isLoading, user, navigate]);
 
   const roles = [
     {

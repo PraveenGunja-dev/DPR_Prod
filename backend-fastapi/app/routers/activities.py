@@ -36,6 +36,9 @@ async def get_project_activities_paginated(
                start_date as "startDate", finish_date as "finishDate",
                start_date as "forecastStartDate", finish_date as "forecastFinishDate",
                baseline_start as "baselineStartDate", baseline_finish as "baselineFinishDate",
+               baseline1_start as "baseline1StartDate", baseline1_finish as "baseline1FinishDate",
+               baseline2_start as "baseline2StartDate", baseline2_finish as "baseline2FinishDate",
+               baseline3_start as "baseline3StartDate", baseline3_finish as "baseline3FinishDate",
                actual_start as "actualStartDate", actual_finish as "actualFinishDate",
                percent_complete as "percentComplete",
                physical_percent_complete as "physicalPercentComplete",
@@ -51,7 +54,7 @@ async def get_project_activities_paginated(
                balance, cumulative
         FROM solar_activities 
         WHERE project_object_id = $1
-        ORDER BY planned_start
+        ORDER BY name ASC, activity_id ASC
         LIMIT $2 OFFSET $3
     """, project_id, limit, offset)
     
@@ -83,6 +86,9 @@ async def get_dp_qty_activities(
                sa.planned_start as "plannedStartDate", sa.planned_finish as "plannedFinishDate",
                sa.start_date as "forecastStartDate", sa.finish_date as "forecastFinishDate",
                sa.baseline_start as "baselineStartDate", sa.baseline_finish as "baselineFinishDate",
+               sa.baseline1_start as "baseline1StartDate", sa.baseline1_finish as "baseline1FinishDate",
+               sa.baseline2_start as "baseline2StartDate", sa.baseline2_finish as "baseline2FinishDate",
+               sa.baseline3_start as "baseline3StartDate", sa.baseline3_finish as "baseline3FinishDate",
                sa.actual_start as "actualStartDate", sa.actual_finish as "actualFinishDate",
                sa.total_quantity as "targetQty",
                sa.balance, sa.cumulative,
@@ -92,7 +98,7 @@ async def get_dp_qty_activities(
                sa.uom as "unitOfMeasure"
         FROM solar_activities sa
         WHERE sa.project_object_id = $1
-        ORDER BY sa.planned_start
+        ORDER BY sa.name ASC, sa.activity_id ASC
     """, project_id)
     
     return {
@@ -129,7 +135,7 @@ async def get_activities(
                    actual_start as "ActualStartDate", actual_finish as "ActualFinishDate",
                    percent_complete as "PercentComplete", status as "Status"
             FROM solar_activities WHERE project_object_id = $1
-            ORDER BY planned_start
+            ORDER BY name ASC, activity_id ASC
         """, projectId)
     else:
         rows = await pool.fetch("""
@@ -139,7 +145,7 @@ async def get_activities(
                    start_date as "StartDate", finish_date as "FinishDate",
                    actual_start as "ActualStartDate", actual_finish as "ActualFinishDate",
                    percent_complete as "PercentComplete", status as "Status"
-            FROM solar_activities ORDER BY planned_start LIMIT 100
+            FROM solar_activities ORDER BY name ASC, activity_id ASC LIMIT 100
         """)
     return [dict(r) for r in rows]
 

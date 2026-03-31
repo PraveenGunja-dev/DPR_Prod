@@ -1,16 +1,32 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { StyledExcelTable } from "@/components/StyledExcelTable";
 import { StatusChip } from "@/components/StatusChip";
+import { indianDateFormat, getTodayAndYesterday } from "@/services/dprService";
 
-interface DPVendorIdtData {
+export interface DPVendorIdtData {
   // From P6 API
   activityId: string;
-  activities: string;
+  description: string;
   plot: string;
+  block?: string;
   newBlockNom: string;
   baselinePriority: string;
   scope: string;
   front: string;
+  uom?: string;
+  balance?: string;
+  basePlanStart?: string;
+  basePlanFinish?: string;
+  bl1Start?: string;
+  bl1Finish?: string;
+  bl2Start?: string;
+  bl2Finish?: string;
+  bl3Start?: string;
+  bl3Finish?: string;
+  actualStart?: string;
+  actualFinish?: string;
+  forecastStart?: string;
+  forecastFinish?: string;
 
   // User-editable fields
   priority: string;
@@ -66,73 +82,98 @@ export function DPVendorIdtTable({
   selectedBlock = "ALL"
 }: DPVendorIdtTableProps) {
 
+  const { yesterday: previousDateISO } = getTodayAndYesterday();
+  const previousDate = indianDateFormat(previousDateISO);
 
-  // Define columns
+
+  // Define columns - 15 total
   const columns = [
     "Activity ID",
-    "Activities",
-    "Plot",
-    "New Block Nom",
+    "Description",
+    "Block",
     "Priority",
-    "Baseline Priority",
     "Contractor Name",
+    "UOM",
     "Scope",
-    "Front",
-    "Actual",
-    "% Completion",
-    "Remarks",
-    yesterday,
-    today
+    `Completed as on "${previousDate}"`,
+    "Balance",
+    "Baseline Start",
+    "Baseline Finish",
+    "Actual/Forecast Start",
+    "Actual/Forecast Finish",
+    indianDateFormat(yesterday),
+    indianDateFormat(today)
   ];
 
   // Filter data based on selected block
   const filteredData = useMemo(() => {
     if (!Array.isArray(data)) return [];
-    if (selectedBlock === "ALL") return data;
-    return data.filter(d => d.isCategoryRow || d.block === selectedBlock || d.newBlockNom === selectedBlock);
+    return selectedBlock === "ALL" ? data : data.filter(d => d.isCategoryRow || d.block === selectedBlock || d.newBlockNom === selectedBlock);
   }, [data, selectedBlock]);
 
   // Convert array of objects to array of arrays
   const tableData = useMemo(() => {
+    const formatDt = (dt: any) => {
+      if (!dt) return '';
+      const dtStr = String(dt).split('T')[0];
+      return indianDateFormat(dtStr) || dtStr;
+    };
+
     return (Array.isArray(filteredData) ? filteredData : []).map(row => {
+        const baselineStart = formatDt((row as any).bl4Start || row.bl3Start || row.bl2Start || row.bl1Start || row.basePlanStart);
+        const baselineFinish = formatDt((row as any).bl4Finish || row.bl3Finish || row.bl2Finish || row.bl1Finish || row.basePlanFinish);
+
         if (row.isCategoryRow) {
-        // Category row - only show category in first column, rest empty
-        return [
-            row.category || '',
-            '', '', '', '', '', '', '', '', '', '', '',
-            '', ''
-        ];
+          // Category row - Heading row with sums
+          return [
+            '', // Activity ID (empty for heading)
+            row.description || '', // Description (Index 1)
+            '', // Block (Index 2)
+            '', // Priority (Index 3)
+            '', // Contractor Name (Index 4)
+            '', // UOM (Index 5)
+            row.scope || '', // Scope (Index 6)
+            row.actual || '', // Completed (Index 7)
+            row.balance || '', // Balance (Index 8)
+            baselineStart, // Index 9
+            baselineFinish, // Index 10
+            indianDateFormat(row.actualStart || row.forecastStart) || '', // Index 11
+            indianDateFormat(row.actualFinish || row.forecastFinish) || '', // Index 12
+            row.yesterdayValue || '', // Index 13
+            row.todayValue || '' // Index 14
+          ];
         } else {
         // Activity row - show all data
         return [
             row.activityId || '',
-            row.activities || '',
-            row.plot || '',
+            row.description || '',
             row.newBlockNom || row.block || '',
             row.priority || '',
-            row.baselinePriority || '',
             row.contractorName || '',
+            row.uom || '',
             row.scope || '',
-            row.front || '',
             row.actual || '',
-            row.completionPercentage || '',
-            row.remarks || '',
-            row.yesterdayValue || '', // Number value for yesterday
-            row.todayValue || '' // Number value for today (editable)
+            row.balance || '',
+            baselineStart,
+            baselineFinish,
+            indianDateFormat(row.actualStart || row.forecastStart) || '',
+            indianDateFormat(row.actualFinish || row.forecastFinish) || '',
+            row.yesterdayValue || '',
+            row.todayValue || ''
         ];
         }
     });
-  }, [filteredData, yesterday, today]);
+  }, [filteredData, yesterday, today, previousDate]);
 
-  // Create row styles for category rows
   const rowStyles = useMemo(() => {
     const styles: Record<number, any> = {};
     filteredData.forEach((row, index) => {
         if (row.isCategoryRow) {
         styles[index] = {
-            backgroundColor: '#49415B',
-            color: '#ffffff',
-            fontWeight: 'bold'
+            backgroundColor: '#FADFAD',
+            color: '#333333',
+            fontWeight: 'bold',
+            isCategoryRow: true
         };
         }
     });
@@ -145,12 +186,12 @@ export function DPVendorIdtTable({
     filteredData.forEach((row, rowIndex) => {
       if (row.yesterdayIsApproved === false) {
         colors[rowIndex] = {
-          [yesterday]: "#ce440d", // Darker orange
+          [indianDateFormat(yesterday)]: "#ce440d", // Darker orange
           "Actual": "#ce440d"
         };
       } else if (row.yesterdayIsApproved === true) {
         colors[rowIndex] = {
-          [yesterday]: "#16a34a", // Green
+          [indianDateFormat(yesterday)]: "#16a34a", // Green
           "Actual": "#16a34a"
         };
       }
@@ -166,16 +207,16 @@ export function DPVendorIdtTable({
       const originalRow = filteredData[index];
 
       if (originalRow?.isCategoryRow) {
-        // Category row - preserve category data
-        return {
-          ...originalRow,
-          category: row[0] || ''
-        };
+        // Category row - preserve as-is (will be recalculated below)
+        return { ...originalRow };
       } else {
-        // Activity row - update all fields
-        const scope = Number(row[7]) || 0;
-        const newYesterday = Number(row[12]) || 0;
-        const newToday = Number(row[13]) || 0;
+        // Activity row - map columns back correctly
+        // Columns: 0=ActivityID, 1=Description, 2=Block, 3=Priority, 4=ContractorName,
+        //          5=UOM, 6=Scope, 7=Completed, 8=Balance, 9=BaseStart, 10=BaseFinish,
+        //          11=ActualStart, 12=ForecastComp, 13=Yesterday, 14=Today
+        const scope = Number(row[6]) || 0;
+        const newYesterday = Number(row[13]) || 0;
+        const newToday = Number(row[14]) || 0;
 
         // Calculate Base Actual (Total excluding current today/yesterday)
         const initialActual = Number(originalRow.actual) || 0;
@@ -184,31 +225,65 @@ export function DPVendorIdtTable({
         const baseActual = initialActual - initialToday - initialYesterday;
 
         const calculatedActual = baseActual + newYesterday + newToday;
-        const calculatedPercentage = scope > 0 ? ((calculatedActual / scope) * 100).toFixed(2) : "0.00";
+        const calculatedBalance = scope - calculatedActual;
 
         return {
           ...originalRow,
           activityId: row[0] || '',
-          activities: row[1] || '',
-          plot: row[2] || '',
-          newBlockNom: row[3] || '',
-          priority: row[4] || '',
-          baselinePriority: row[5] || '',
-          contractorName: row[6] || '',
+          description: row[1] || '',
+          priority: row[3] || '',
+          contractorName: row[4] || '',
+          uom: row[5] || '',
           scope: String(scope),
-          front: row[8] || '',
           actual: String(calculatedActual),
-          completionPercentage: calculatedPercentage + "%",
-          remarks: row[11] || '',
+          balance: String(calculatedBalance),
+          actualStart: row[11] || '',
+          actualFinish: row[12] || '', // It maps the generic 'forecast/actual completion' here if we were capturing it
           yesterdayValue: String(newYesterday),
           todayValue: String(newToday)
         };
       }
     });
+
+    // Recalculate category row totals from updated activity rows
+    // Group activities by their category heading (find nearest preceding category row)
+    let currentCategoryIdx = -1;
+    const categoryActivityMap: Record<number, number[]> = {};
+    updatedRows.forEach((row, idx) => {
+      if (row.isCategoryRow) {
+        currentCategoryIdx = idx;
+        categoryActivityMap[idx] = [];
+      } else if (currentCategoryIdx >= 0) {
+        categoryActivityMap[currentCategoryIdx].push(idx);
+      }
+    });
+
+    // Update each category row's totals
+    Object.entries(categoryActivityMap).forEach(([catIdxStr, activityIndices]) => {
+      const catIdx = Number(catIdxStr);
+      const catRow = updatedRows[catIdx];
+      const activities = activityIndices.map(i => updatedRows[i]);
+
+      const totalScope = activities.reduce((sum, r) => sum + (Number(r.scope) || 0), 0);
+      const totalActual = activities.reduce((sum, r) => sum + (Number(r.actual) || 0), 0);
+      const totalBalance = totalScope - totalActual;
+      const totalYesterday = activities.reduce((sum, r) => sum + (Number(r.yesterdayValue) || 0), 0);
+      const totalToday = activities.reduce((sum, r) => sum + (Number(r.todayValue) || 0), 0);
+
+      updatedRows[catIdx] = {
+        ...catRow,
+        scope: String(totalScope),
+        actual: String(totalActual),
+        balance: String(totalBalance),
+        yesterdayValue: String(totalYesterday),
+        todayValue: String(totalToday)
+      };
+    });
     
     if (selectedBlock !== "ALL") {
         const fullDataCopy = [...data];
         updatedRows.forEach(updatedRow => {
+            if (updatedRow.isCategoryRow) return; // Skip category rows in full data update
             const idx = fullDataCopy.findIndex(d => d.activityId === updatedRow.activityId);
             if (idx !== -1) fullDataCopy[idx] = updatedRow;
         });
@@ -220,50 +295,52 @@ export function DPVendorIdtTable({
 
   // Define which columns are editable
   const editableColumns = [
+    "UOM",
     "Priority",
-    "Baseline Priority",
     "Contractor Name",
     "Scope",
-    "Front",
-    "Remarks",
-    yesterday, // Yesterday's value is now editable
-    today
+    "Actual/Forecast Start",
+    "Actual/Forecast Finish",
+    indianDateFormat(yesterday),
+    indianDateFormat(today)
   ];
 
   // Define column types
   const columnTypes: Record<string, 'text' | 'number' | 'date'> = {
     "Activity ID": "text",
-    "Activities": "text",
-    "Plot": "text",
-    "New Block Nom": "text",
+    "Description": "text",
+    "Block": "text",
     "Priority": "text",
-    "Baseline Priority": "text",
     "Contractor Name": "text",
+    "UOM": "text",
     "Scope": "number",
-    "Front": "number",
-    "Actual": "number",
-    "% Completion": "number",
-    "Remarks": "text",
-    [yesterday]: "number",
-    [today]: "number"
+    [`Completed as on "${previousDate}"`]: "number",
+    "Balance": "number",
+    "Baseline Start": "text",
+    "Baseline Finish": "text",
+    "Actual/Forecast Start": "date",
+    "Actual/Forecast Finish": "date",
+    [indianDateFormat(yesterday)]: "number",
+    [indianDateFormat(today)]: "number"
   };
 
   // Define column widths for better alignment
   const columnWidths = {
-    "Activity ID": 40,
-    "Activities": 120,
-    "Plot": 60,
-    "New Block Nom": 80,
+    "Activity ID": 80,
+    "Description": 200,
+    "Block": 80,
     "Priority": 60,
-    "Baseline Priority": 80,
-    "Contractor Name": 80,
-    "Scope": 60,
-    "Front": 60,
-    "Actual": 60,
-    "% Completion": 60,
-    "Remarks": 100,
-    [yesterday]: 60,
-    [today]: 60
+    "Contractor Name": 120,
+    "UOM": 60,
+    "Scope": 80,
+    [`Completed as on "${previousDate}"`]: 100,
+    "Balance": 80,
+    "Baseline Start": 100,
+    "Baseline Finish": 100,
+    "Actual/Forecast Start": 120,
+    "Actual/Forecast Finish": 120,
+    [indianDateFormat(yesterday)]: 80,
+    [indianDateFormat(today)]: 80
   };
 
   return (
@@ -292,19 +369,20 @@ export function DPVendorIdtTable({
           // First header row - main column names
           [
             { label: "Activity ID", colSpan: 1 },
-            { label: "Activities", colSpan: 1 },
-            { label: "Plot", colSpan: 1 },
-            { label: "New Block Nom", colSpan: 1 },
+            { label: "Description", colSpan: 1 },
+            { label: "Block", colSpan: 1 },
             { label: "Priority", colSpan: 1 },
-            { label: "Baseline Priority", colSpan: 1 },
             { label: "Contractor Name", colSpan: 1 },
+            { label: "UOM", colSpan: 1 },
             { label: "Scope", colSpan: 1 },
-            { label: "Front", colSpan: 1 },
-            { label: "Actual", colSpan: 1 },
-            { label: "% Completion", colSpan: 1 },
-            { label: "Remarks", colSpan: 1 },
-            { label: yesterday, colSpan: 1 },
-            { label: today, colSpan: 1 }
+            { label: `Completed as on "${previousDate}"`, colSpan: 1 },
+            { label: "Balance", colSpan: 1 },
+            { label: "Baseline Start", colSpan: 1 },
+            { label: "Baseline Finish", colSpan: 1 },
+            { label: "Actual/Forecast Start", colSpan: 1 },
+            { label: "Actual/Forecast Finish", colSpan: 1 },
+            { label: indianDateFormat(yesterday), colSpan: 1 },
+            { label: indianDateFormat(today), colSpan: 1 }
           ]
         ]}
         status={status} // Pass status to StyledExcelTable

@@ -165,7 +165,7 @@ export const PMAGDashboardDetailModal: React.FC<PMAGDashboardDetailModalProps> =
                         <div className="flex items-center gap-2 ml-4">
                             {type === 'approved' && (
                                 <>
-                                    {onPushToP6 && (
+                                    {onPushToP6 && ['dp_vendor_idt', 'dp_vendor_block', 'manpower_details'].includes(entry.sheet_type) && (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); onPushToP6(entry); }}
                                             className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 rounded-lg flex items-center gap-1.5 transition-all shadow-sm hover:shadow-md"

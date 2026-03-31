@@ -16,7 +16,8 @@ interface IssueFormData {
   description: string;
   startDate: string;
   finishedDate: string;
-  status: "Open" | "In Progress" | "Resolved";
+  status: "Open" | "In Progress" | "Resolved" | "Closed";
+  priority: "Low" | "Medium" | "High" | "Critical";
   actionRequired: string;
   remarks: string;
   attachment: File | null;
@@ -35,6 +36,7 @@ export function IssueFormModal({ open, onOpenChange, onSubmit, initialData = {} 
     startDate: initialData.startDate || "",
     finishedDate: initialData.finishedDate || "",
     status: initialData.status || "Open",
+    priority: initialData.priority || "Medium",
     actionRequired: initialData.actionRequired || "",
     remarks: initialData.remarks || "",
     attachment: initialData.attachment || null,
@@ -47,7 +49,7 @@ export function IssueFormModal({ open, onOpenChange, onSubmit, initialData = {} 
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSelectChange = (value: "Open" | "In Progress" | "Resolved") => {
+  const handleSelectChange = (value: any) => {
     setFormData(prev => ({ ...prev, status: value }));
   };
 
@@ -91,6 +93,7 @@ export function IssueFormModal({ open, onOpenChange, onSubmit, initialData = {} 
       startDate: "",
       finishedDate: "",
       status: "Open",
+      priority: "Medium",
       actionRequired: "",
       remarks: "",
       attachment: null,
@@ -109,6 +112,7 @@ export function IssueFormModal({ open, onOpenChange, onSubmit, initialData = {} 
           startDate: "",
           finishedDate: "",
           status: "Open",
+          priority: "Medium",
           actionRequired: "",
           remarks: "",
           attachment: null,
@@ -182,21 +186,41 @@ export function IssueFormModal({ open, onOpenChange, onSubmit, initialData = {} 
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="status" className="text-sm font-medium">
-                Issue Status *
-              </label>
-              <Select value={formData.status} onValueChange={handleSelectChange}>
-                <SelectTrigger className={errors.status ? "border-red-500" : ""}>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Open">Open</SelectItem>
-                  <SelectItem value="In Progress">In Progress</SelectItem>
-                  <SelectItem value="Resolved">Resolved</SelectItem>
-                </SelectContent>
-              </Select>
-              {errors.status && <p className="text-sm text-red-500">{errors.status}</p>}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label htmlFor="status" className="text-sm font-medium">
+                  Issue Status *
+                </label>
+                <Select value={formData.status} onValueChange={(v: any) => handleSelectChange(v)}>
+                  <SelectTrigger className={errors.status ? "border-red-500" : ""}>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[10000] bg-white border shadow-lg" position="popper">
+                    <SelectItem value="Open">Open</SelectItem>
+                    <SelectItem value="In Progress">In Progress</SelectItem>
+                    <SelectItem value="Resolved">Resolved</SelectItem>
+                    <SelectItem value="Closed">Closed</SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.status && <p className="text-sm text-red-500">{errors.status}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="priority" className="text-sm font-medium">
+                  Priority *
+                </label>
+                <Select value={formData.priority} onValueChange={(value: any) => setFormData(prev => ({ ...prev, priority: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select priority" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[10000] bg-white border shadow-lg" position="popper">
+                    <SelectItem value="Low">Low</SelectItem>
+                    <SelectItem value="Medium">Medium</SelectItem>
+                    <SelectItem value="High">High</SelectItem>
+                    <SelectItem value="Critical">Critical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="space-y-2">

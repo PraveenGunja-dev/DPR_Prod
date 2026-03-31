@@ -46,7 +46,7 @@ async def get_all_projects_for_assignment(
             SELECT "ObjectId" AS "ObjectId", "Name" AS "Name", NULL AS "Location",
                    "Status" AS "Status", 0 AS "PercentComplete",
                    "StartDate" as "PlannedStartDate", "FinishDate" as "PlannedFinishDate",
-                   NULL AS "ActualStartDate", NULL AS "ActualFinishDate", 'p6' as "Source"
+                   NULL AS "ActualStartDate", NULL AS "ActualFinishDate", 'p6' as "Source", project_type AS "projectType"
             FROM p6_projects 
             ORDER BY "Name", "ObjectId" DESC
         """)
@@ -55,7 +55,7 @@ async def get_all_projects_for_assignment(
             SELECT p."ObjectId" AS "ObjectId", p."Name" AS "Name", NULL AS "Location",
                    p."Status" AS "Status", 0 AS "PercentComplete",
                    p."StartDate" as "PlannedStartDate", p."FinishDate" as "PlannedFinishDate",
-                   NULL AS "ActualStartDate", NULL AS "ActualFinishDate", 'p6' as "Source"
+                   NULL AS "ActualStartDate", NULL AS "ActualFinishDate", 'p6' as "Source", p.project_type AS "projectType"
             FROM p6_projects p
             INNER JOIN project_assignments pa ON p."ObjectId" = pa.project_id
             WHERE pa.user_id = $1
@@ -81,14 +81,14 @@ async def get_user_projects(
     if cached:
         return cached
 
-    privileged_roles = ("PMAG", "Super Admin", "Site PM", "admin")
+    privileged_roles = ("PMAG", "Super Admin", "admin")
     if user_role in privileged_roles:
         rows = await pool.fetch("""
             SELECT "ObjectId" AS "ObjectId", "Name" AS "Name", NULL AS "Location",
                    "Status" AS "Status", 0 AS "PercentComplete",
                    "StartDate" as "PlannedStartDate", "FinishDate" as "PlannedFinishDate",
                    "Description" AS "Description", "Id" as "P6Id", 'p6' as "Source",
-                   NULL AS "sheetTypes"
+                   NULL AS "sheetTypes", project_type AS "projectType"
             FROM p6_projects 
             ORDER BY "Name", "ObjectId" DESC
         """)
@@ -98,7 +98,7 @@ async def get_user_projects(
                    p."Status" AS "Status", 0 AS "PercentComplete",
                    p."StartDate" as "PlannedStartDate", p."FinishDate" as "PlannedFinishDate",
                    p."Description" AS "Description", p."Id" as "P6Id", 'p6' as "Source",
-                   pa.sheet_types AS "sheetTypes"
+                   pa.sheet_types AS "sheetTypes", p.project_type AS "projectType"
             FROM p6_projects p
             INNER JOIN project_assignments pa ON p."ObjectId" = pa.project_id
             WHERE pa.user_id = $1
@@ -156,7 +156,7 @@ async def get_project_by_id(
                        p."StartDate" as "PlannedStartDate", p."FinishDate" as "PlannedFinishDate",
                        NULL AS "ActualStartDate", NULL AS "ActualFinishDate",
                        p."Description" AS "Description", 'p6' as "Source",
-                       pa.sheet_types AS "sheetTypes"
+                       pa.sheet_types AS "sheetTypes", p.project_type AS "projectType"
                 FROM p6_projects p
                 INNER JOIN project_assignments pa ON p."ObjectId" = pa.project_id
                 WHERE p."ObjectId" = $1 AND pa.user_id = $2
@@ -168,7 +168,7 @@ async def get_project_by_id(
                        "StartDate" as "PlannedStartDate", "FinishDate" as "PlannedFinishDate",
                        NULL AS "ActualStartDate", NULL AS "ActualFinishDate",
                        "Description" AS "Description", 'p6' as "Source",
-                       NULL AS "sheetTypes"
+                       NULL AS "sheetTypes", project_type AS "projectType"
                 FROM p6_projects WHERE "ObjectId" = $1
             """, project_id)
 

@@ -43,7 +43,7 @@ async def register(
     requester_role = current_user.get("role")
     target_role = body.role
 
-    if requester_role == "Super Admin":
+    if requester_role in ("Super Admin", "admin"):
         pass  # can create any
     elif requester_role == "PMAG":
         if target_role not in ("Site PM", "supervisor"):
@@ -57,11 +57,11 @@ async def register(
             )
     else:
         raise HTTPException(
-            403, detail={"message": "Access denied. Only Super Admin, PMAG and Site PM users can create new users."}
+            403, detail={"message": "Access denied. Only Super Admin, admin, PMAG, and Site PM users can create new users."}
         )
 
     # Validate role
-    valid_roles = ["supervisor", "Site PM", "PMAG", "Super Admin"]
+    valid_roles = ["supervisor", "Site PM", "PMAG", "admin", "Super Admin"]
     if target_role not in valid_roles:
         raise HTTPException(400, detail={"message": f"Invalid role. Must be one of: {', '.join(valid_roles)}"})
 
@@ -71,8 +71,8 @@ async def register(
         raise HTTPException(400, detail={"message": "Invalid email format"})
 
     # Validate password
-    if len(body.password) < 15:
-        raise HTTPException(400, detail={"message": "Password must be at least 15 characters long (Adani Password Policy)"})
+    if len(body.password) < 8:
+        raise HTTPException(400, detail={"message": "Password must be at least 8 characters long"})
 
     hashed = hash_password(body.password)
 
@@ -128,20 +128,25 @@ async def login(body: LoginRequest, pool: object = Depends(get_db)):
     if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", body.email):
         raise HTTPException(400, detail={"message": "Invalid email format"})
 
+    logger.info(f"--- LOGIN ATTEMPT for {body.email} ---")
     row = await pool.fetchrow(
-        "SELECT user_id, name, email, password, role, is_active FROM users WHERE email = $1",
-        body.email,
+        "SELECT user_id, name, email, password, role, is_active FROM users WHERE LOWER(email) = LOWER($1)",
+        body.email.strip(),
     )
 
     if not row:
+        logger.warning(f"Login failed: User not found for email (checked case-insensitively): '{body.email}'")
         raise HTTPException(401, detail={"message": "Invalid credentials"})
 
     if not row["is_active"]:
-        raise HTTPException(401, detail={"message": "You are inactive. Contact admin to make your account active."})
+        logger.warning(f"Login failed: User is inactive (id={row['user_id']})")
+        raise HTTPException(401, detail={"message": "You are inactive. Contact admin."})
 
     if not verify_password(body.password, row["password"]):
+        logger.warning(f"Login failed: Invalid password for user {body.email}")
         raise HTTPException(401, detail={"message": "Invalid credentials"})
 
+    logger.info(f"--- LOGIN SUCCESS for {body.email} ---")
     tokens = generate_tokens(row["user_id"], row["email"], row["role"])
 
     _refresh_tokens[tokens["refreshToken"]] = {

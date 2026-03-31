@@ -131,8 +131,12 @@ apiClient.interceptors.response.use(
 
             try {
                 console.log('[ApiClient] Attempting token refresh...');
-                // Call refresh token endpoint
-                const response = await axios.post(`${API_URL}/auth/refresh-token`, {
+                // Call refresh token endpoint (avoid double slashes)
+                const refreshUrl = API_URL.endsWith('/') 
+                    ? `${API_URL}auth/refresh-token` 
+                    : `${API_URL}/auth/refresh-token`;
+                
+                const response = await axios.post(refreshUrl, {
                     refreshToken
                 });
 

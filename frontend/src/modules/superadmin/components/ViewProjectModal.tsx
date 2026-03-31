@@ -80,8 +80,8 @@ export const ViewProjectModal: React.FC<ViewProjectModalProps> = ({
 
         {/* ================= PROJECT HEADER ================= */}
         <div className="pt-12 px-6 pb-4 border-b bg-white dark:bg-gray-800">
-          <h2 className="text-xl font-semibold dark:text-white">{project.Name}</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-300">{project.Location || 'No location specified'}</p>
+          <h2 className="text-xl font-semibold dark:text-white">{project.Name || (project as any).name}</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-300">{(project.Location || (project as any).location) || 'No location specified'}</p>
         </div>
 
         {/* ================= BODY ================= */}
@@ -127,16 +127,16 @@ export const ViewProjectModal: React.FC<ViewProjectModalProps> = ({
               </h3>
 
               <InfoRow label="Plan Start">
-                {project.PlanStart ? new Date(project.PlanStart).toLocaleDateString() : 'N/A'}
+                {(project.PlanStart || (project as any).planStart || (project as any).PlannedStartDate) ? new Date(project.PlanStart || (project as any).planStart || (project as any).PlannedStartDate).toLocaleDateString() : 'N/A'}
               </InfoRow>
 
               <InfoRow label="Plan End">
-                {project.PlanEnd ? new Date(project.PlanEnd).toLocaleDateString() : 'N/A'}
+                {(project.PlanEnd || (project as any).planEnd || (project as any).PlannedFinishDate) ? new Date(project.PlanEnd || (project as any).planEnd || (project as any).PlannedFinishDate).toLocaleDateString() : 'N/A'}
               </InfoRow>
 
               <InfoRow label="Duration">
-                {project.PlanStart && project.PlanEnd ? (
-                  `${Math.ceil((new Date(project.PlanEnd).getTime() - new Date(project.PlanStart).getTime()) / (1000 * 60 * 60 * 24))} days`
+                {(project.PlanStart || (project as any).planStart || (project as any).PlannedStartDate) && (project.PlanEnd || (project as any).planEnd || (project as any).PlannedFinishDate) ? (
+                  `${Math.ceil((new Date(project.PlanEnd || (project as any).planEnd || (project as any).PlannedFinishDate).getTime() - new Date(project.PlanStart || (project as any).planStart || (project as any).PlannedStartDate).getTime()) / (1000 * 60 * 60 * 24))} days`
                 ) : 'N/A'}
               </InfoRow>
             </div>

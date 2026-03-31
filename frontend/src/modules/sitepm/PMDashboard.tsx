@@ -13,7 +13,8 @@ import {
     PMAssignProjectModal,
     PMSuccessModal,
     PMRejectReasonModal,
-    SheetListModal
+    SheetListModal,
+    PMSheetEntries
 } from "./components";
 import {
     getEntriesForPMReview,
@@ -22,7 +23,7 @@ import {
     updateEntryByPM,
 } from "@/services/dprService";
 import {
-    getUserProjects,
+    getAssignedProjects,
     assignProjectsToMultipleSupervisors
 } from "@/services/projectService";
 import {
@@ -48,6 +49,7 @@ const PMDashboard = () => {
     const [editingEntry, setEditingEntry] = useState<DPREntry | null>(null);
     const [editData, setEditData] = useState<any>(null);
     const [projects, setProjects] = useState<Project[]>([]);
+    const [activeTab, setActiveTab] = useState("dp_qty");
     const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
     const [showAssignProjectModal, setShowAssignProjectModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -56,12 +58,25 @@ const PMDashboard = () => {
     const [sheetListModalConfig, setSheetListModalConfig] = useState<{ isOpen: boolean; title: string; entries: DPREntry[] }>({
         isOpen: false, title: "", entries: []
     });
+    const [expandedEntries, setExpandedEntries] = useState<Record<number, boolean>>({});
+    const [isFullscreen, setIsFullscreen] = useState(false);
 
     const fetchEntries = async () => {
         try {
             setLoading(true);
             const entries = await getEntriesForPMReview(projectId);
             setSubmittedEntries(entries);
+            
+            const pending = entries.filter((e: any) => e.status === 'submitted_to_pm');
+            if (pending.length > 0 && !pending.some((e: any) => e.sheet_type === activeTab)) {
+                const types = ['dp_qty', 'dp_block', 'dp_vendor_idt', 'mms_module_rfi', 'dp_vendor_block', 'manpower_details'];
+                for (const t of types) {
+                    if (pending.some((e: any) => e.sheet_type === t)) {
+                        setActiveTab(t);
+                        break;
+                    }
+                }
+            }
         } catch (error: any) {
             toast.error(error.message || "Failed to load submitted sheets");
         } finally {
@@ -113,6 +128,20 @@ const PMDashboard = () => {
         }
     };
 
+    const handleUpdateEntry = (entryId: number, data: any) => {
+        setEditData(data);
+    };
+
+    const handleSaveEditFromEntries = async (entryId: number, data: any) => {
+        try {
+            await updateEntryByPM(entryId, data);
+            toast.success("Entry saved successfully");
+            await fetchEntries();
+        } catch (error) {
+            toast.error(`Failed to save: ${(error as Error).message}`);
+        }
+    };
+
     const [showRejectReasonModal, setShowRejectReasonModal] = useState(false);
     const [rejectingEntryId, setRejectingEntryId] = useState<number | null>(null);
     const [rejectingEntrySheetType, setRejectingEntrySheetType] = useState<string>('');
@@ -153,17 +182,35 @@ const PMDashboard = () => {
     };
 
     useEffect(() => {
-        if (user && user.role === 'Site PM') {
+        const userRole = user?.role || user?.Role;
+        if (user && userRole === 'Site PM') {
             const loadAllData = async () => {
                 try {
                     const [entriesData, projectsData, supervisorsData] = await Promise.all([
                         getEntriesForPMReview(projectId),
-                        getUserProjects(),
+                        getAssignedProjects(),
                         getAllSupervisors()
                     ]);
                     setSubmittedEntries(entriesData);
                     setProjects(projectsData);
                     setSupervisors(supervisorsData);
+                    
+                    console.log(`[PMDashboard] Loaded data: ${entriesData.length} entries for projectId: ${projectId || 'All'}`);
+                    if (entriesData.length > 0) {
+                        console.log(`[PMDashboard] First entry status: ${entriesData[0].status}`);
+                    }
+                    
+                    // Auto-select tab with pending entries for better UX
+                    const pending = entriesData.filter((e: any) => e.status === 'submitted_to_pm');
+                    if (pending.length > 0) {
+                        const types = ['dp_qty', 'dp_block', 'dp_vendor_idt', 'mms_module_rfi', 'dp_vendor_block', 'manpower_details'];
+                        for (const t of types) {
+                            if (pending.some((e: any) => e.sheet_type === t)) {
+                                setActiveTab(t);
+                                break;
+                            }
+                        }
+                    }
                 } catch (error) {
                     toast.error("Failed to fetch data");
                 } finally {
@@ -195,6 +242,29 @@ const PMDashboard = () => {
                     onRefresh={fetchEntries}
                     onStatClick={(filterType, entries, title) => setSheetListModalConfig({ isOpen: true, title, entries })}
                 />
+                
+                <PMSheetEntries 
+                    submittedEntries={submittedEntries}
+                    loading={loading}
+                    onRefresh={fetchEntries}
+                    onApprove={handleApprove}
+                    onReject={handleReject}
+                    onEditEntry={handleEditEntry}
+                    onUpdateEntry={handleUpdateEntry}
+                    onSaveEntry={handleSaveEditFromEntries}
+                    activeTab={activeTab}
+                    onTabChange={setActiveTab}
+                    expandedEntries={expandedEntries}
+                    setExpandedEntries={setExpandedEntries}
+                    isFullscreen={isFullscreen}
+                    setIsFullscreen={setIsFullscreen}
+                    projects={projects}
+                    editingEntry={editingEntry}
+                    setEditingEntry={setEditingEntry}
+                    editData={editData}
+                    setEditData={setEditData}
+                />
+
                 <PMChartsSection
                     submittedEntries={submittedEntries}
                     onStatClick={(filterType, entries, title) => setSheetListModalConfig({ isOpen: true, title, entries })}

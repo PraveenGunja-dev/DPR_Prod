@@ -64,6 +64,7 @@ interface PMSheetEntriesProps {
   setExpandedEntries: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
   isFullscreen: boolean;
   setIsFullscreen: React.Dispatch<React.SetStateAction<boolean>>;
+  projects: any[];
   editingEntry: any;
   setEditingEntry: React.Dispatch<React.SetStateAction<any>>;
   editData: any;
@@ -85,6 +86,7 @@ export const PMSheetEntries: React.FC<PMSheetEntriesProps> = ({
   setExpandedEntries,
   isFullscreen,
   setIsFullscreen,
+  projects,
   editingEntry,
   setEditingEntry,
   editData,
@@ -122,11 +124,11 @@ export const PMSheetEntries: React.FC<PMSheetEntriesProps> = ({
     setCommentPopover(null);
   };
 
-  // Filter entries by sheet type - ONLY SHOW SUBMITTED ENTRIES
+  // Filter entries by sheet type
   const getEntriesBySheetType = (sheetType: string) => {
     return submittedEntries.filter(entry =>
       entry.sheet_type === sheetType &&
-      entry.status === 'submitted_to_pm'
+      ['submitted_to_pm', 'approved_by_pm', 'final_approved'].includes(entry.status)
     );
   };
 
@@ -203,13 +205,13 @@ export const PMSheetEntries: React.FC<PMSheetEntriesProps> = ({
                           variant={
                             entry.status === "submitted_to_pm" ? "secondary" :
                               entry.status === "approved_by_pm" ? "default" :
-                                "destructive"
+                                entry.status === "final_approved" ? "outline" : "destructive"
                           }
-                          className="px-2 py-0.5 text-xs font-medium"
+                          className={`px-2 py-0.5 text-xs font-medium ${entry.status === 'final_approved' ? 'border-primary text-primary' : ''}`}
                         >
                           {entry.status === "submitted_to_pm" ? "Pending" :
                             entry.status === "approved_by_pm" ? "Approved" :
-                              "Rejected"}
+                              entry.status === "final_approved" ? "Pushed to P6" : "Rejected"}
                         </Badge>
                       </div>
                       <span className="text-xs text-muted-foreground mt-1 md:mt-0">
@@ -221,7 +223,7 @@ export const PMSheetEntries: React.FC<PMSheetEntriesProps> = ({
                         {entry.supervisor_name || 'Supervisor'} ({entry.supervisor_email})
                       </span>
                       <span className="text-xs font-medium text-primary hidden md:block">
-                        Project ID: {entry.project_id}
+                        Project: {projects.find(p => String(p.id) === String(entry.project_id) || String(p.ObjectId) === String(entry.project_id))?.name || `ID: ${entry.project_id}`}
                       </span>
                       <span className="text-xs text-muted-foreground mt-1 md:mt-0">
                         {sheetType.replace(/_/g, ' ')}
@@ -298,6 +300,12 @@ export const PMSheetEntries: React.FC<PMSheetEntriesProps> = ({
                       <Badge variant="outline" className="text-green-600 border-green-600 px-3 py-1 text-xs font-medium flex items-center gap-1">
                         <CheckCircle className="w-4 h-4" />
                         <span>Sent to PMAG</span>
+                      </Badge>
+                    )}
+                    {entry.status === "final_approved" && (
+                      <Badge variant="outline" className="text-primary border-primary px-3 py-1 text-xs font-medium flex items-center gap-1">
+                        <Upload className="w-4 h-4" />
+                        <span>Pushed to P6</span>
                       </Badge>
                     )}
                     {isExpanded ? (

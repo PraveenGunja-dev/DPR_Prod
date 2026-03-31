@@ -7,5 +7,6 @@ export * from './MmsModuleRfiTable';
 export * from './MmsModuleRfiTableWithDynamicColumns';
 export * from './IssueFormModal';
 export * from './IssuesTable';
+export * from './MmsRfiFormModal';
 export * from './DPRSummarySection';
 export * from './CustomSheetsManager';
