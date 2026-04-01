@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { StyledExcelTable } from "@/components/StyledExcelTable";
 import { P6Activity, P6Resource } from "@/services/p6ActivityService";
 import { indianDateFormat } from "@/services/dprService";
@@ -237,14 +237,16 @@ const buildTableData = (groupedActivities: { category: string; activities: any[]
   return { rows, categoryRowIndices };
 };
 
+const EMPTY_ARRAY: any[] = [];
+
 export const DPRSummarySection: React.FC<DPRSummarySectionProps> = ({
-  p6Activities = [],
-  dpQtyData = [],
-  dpBlockData = [],
-  dpVendorBlockData = [],
-  dpVendorIdtData = [],
-  manpowerDetailsData = [],
-  resourceData = [],
+  p6Activities = EMPTY_ARRAY,
+  dpQtyData = EMPTY_ARRAY,
+  dpBlockData = EMPTY_ARRAY,
+  dpVendorBlockData = EMPTY_ARRAY,
+  dpVendorIdtData = EMPTY_ARRAY,
+  manpowerDetailsData = EMPTY_ARRAY,
+  resourceData = EMPTY_ARRAY,
   onExportAll,
   onReachEnd,
   selectedBlock = "ALL",
@@ -345,6 +347,50 @@ export const DPRSummarySection: React.FC<DPRSummarySectionProps> = ({
   const getTitleBarBgClass = () => themeMode === 'light' ? 'bg-[#DDE4EC]' : 'bg-[#2D2D2D]';
   const getTitleBarTextClass = () => themeMode === 'light' ? 'text-black' : 'text-white';
 
+  // Stabilize column definitions and static data
+  const columns = useMemo(() => ["S.No", "Description", "UOM", "Material Scope", "Material Completed", "Material Balance", "% Comp", "Manpower Scope", "Manpower Completed", "Manpower Balance", "Baseline Start", "Baseline Finish", "Actual Start", "Forecast Completion Date"], []);
+
+  const columnTypes = useMemo(() => ({
+    "S.No": "text", "Description": "text", "UOM": "text",
+    "Material Scope": "number", "Material Completed": "number", "Material Balance": "number", "% Comp": "text",
+    "Manpower Scope": "number", "Manpower Completed": "number", "Manpower Balance": "number",
+    "Baseline Start": "text", "Baseline Finish": "text", "Actual Start": "text", "Forecast Completion Date": "text"
+  }), []);
+
+  const columnWidths = useMemo(() => ({
+    "S.No": 50, "Description": 200, "UOM": 60,
+    "Material Scope": 80, "Material Completed": 80, "Material Balance": 80, "% Comp": 70,
+    "Manpower Scope": 80, "Manpower Completed": 80, "Manpower Balance": 80,
+    "Baseline Start": 100, "Baseline Finish": 100, "Actual Start": 100, "Forecast Completion Date": 120
+  }), []);
+
+  const headerStructure = useMemo(() => [
+    // First header row - main Categories and Spanning Columns
+    [
+      { label: "S.No", rowSpan: 2, colSpan: 1 },
+      { label: "Description", rowSpan: 2, colSpan: 1 },
+      { label: "UOM", rowSpan: 2, colSpan: 1 },
+      { label: "Material Metrics", colSpan: 4, rowSpan: 1 },
+      { label: "Manpower Metrics", colSpan: 3, rowSpan: 1 },
+      { label: "Baseline Start", rowSpan: 2, colSpan: 1 },
+      { label: "Baseline Finish", rowSpan: 2, colSpan: 1 },
+      { label: "Actual Start", rowSpan: 2, colSpan: 1 },
+      { label: "Forecast Completion Date", rowSpan: 2, colSpan: 1 }
+    ],
+    // Second header row - sub headings
+    [
+      { label: "Material Scope", colSpan: 1, rowSpan: 1 },
+      { label: "Material Completed", colSpan: 1, rowSpan: 1 },
+      { label: "Material Balance", colSpan: 1, rowSpan: 1 },
+      { label: "% Comp", colSpan: 1, rowSpan: 1 },
+      { label: "Manpower Scope", colSpan: 1, rowSpan: 1 },
+      { label: "Manpower Completed", colSpan: 1, rowSpan: 1 },
+      { label: "Manpower Balance", colSpan: 1, rowSpan: 1 }
+    ]
+  ], []);
+
+  const commonNoOp = useCallback(() => { }, []);
+
   return (
     <div className={`w-full p-4 rounded-lg shadow-md ${getContainerBgClass()}`}>
       <div className="mb-4 flex justify-end">
@@ -362,47 +408,14 @@ export const DPRSummarySection: React.FC<DPRSummarySectionProps> = ({
       {activeTable === 'main' && (
         <StyledExcelTable
           title="Summary of Activities"
-          columns={["S.No", "Description", "UOM", "Material Scope", "Material Completed", "Material Balance", "% Comp", "Manpower Scope", "Manpower Completed", "Manpower Balance", "Baseline Start", "Baseline Finish", "Actual Start", "Forecast Completion Date"]}
+          columns={columns}
           data={mainActivityData}
-          onDataChange={() => { }}
-          onSave={() => { }}
-          onSubmit={() => { }}
-          columnTypes={{
-            "S.No": "text", "Description": "text", "UOM": "text",
-            "Material Scope": "number", "Material Completed": "number", "Material Balance": "number", "% Comp": "text",
-            "Manpower Scope": "number", "Manpower Completed": "number", "Manpower Balance": "number",
-            "Baseline Start": "text", "Baseline Finish": "text", "Actual Start": "text", "Forecast Completion Date": "text"
-          }}
-          columnWidths={{
-            "S.No": 50, "Description": 200, "UOM": 60,
-            "Material Scope": 80, "Material Completed": 80, "Material Balance": 80, "% Comp": 70,
-            "Manpower Scope": 80, "Manpower Completed": 80, "Manpower Balance": 80,
-            "Baseline Start": 100, "Baseline Finish": 100, "Actual Start": 100, "Forecast Completion Date": 120
-          }}
-          headerStructure={[
-            // First header row - main Categories and Spanning Columns
-            [
-              { label: "S.No", rowSpan: 2, colSpan: 1 },
-              { label: "Description", rowSpan: 2, colSpan: 1 },
-              { label: "UOM", rowSpan: 2, colSpan: 1 },
-              { label: "Material Metrics", colSpan: 4, rowSpan: 1 },
-              { label: "Manpower Metrics", colSpan: 3, rowSpan: 1 },
-              { label: "Baseline Start", rowSpan: 2, colSpan: 1 },
-              { label: "Baseline Finish", rowSpan: 2, colSpan: 1 },
-              { label: "Actual Start", rowSpan: 2, colSpan: 1 },
-              { label: "Forecast Completion Date", rowSpan: 2, colSpan: 1 }
-            ],
-            // Second header row - sub headings
-            [
-              { label: "Material Scope", colSpan: 1, rowSpan: 1 },
-              { label: "Material Completed", colSpan: 1, rowSpan: 1 },
-              { label: "Material Balance", colSpan: 1, rowSpan: 1 },
-              { label: "% Comp", colSpan: 1, rowSpan: 1 },
-              { label: "Manpower Scope", colSpan: 1, rowSpan: 1 },
-              { label: "Manpower Completed", colSpan: 1, rowSpan: 1 },
-              { label: "Manpower Balance", colSpan: 1, rowSpan: 1 }
-            ]
-          ]}
+          onDataChange={commonNoOp}
+          onSave={commonNoOp}
+          onSubmit={commonNoOp}
+          columnTypes={columnTypes}
+          columnWidths={columnWidths}
+          headerStructure={headerStructure}
           rowStyles={rowStyles}
           isReadOnly={true}
           hideAddRow={true}

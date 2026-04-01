@@ -258,18 +258,18 @@ const CriticalPathChart: React.FC<{ activities: P6Activity[] }> = ({ activities 
 
     return (
         <div className="w-full overflow-x-auto">
-            <div className="min-w-[800px]">
+            <div className="min-w-[800px] relative">
                 {/* Header row with months */}
                 <div className="flex border-b border-border">
-                    <div className="w-64 flex-shrink-0 px-2 py-2 font-semibold bg-muted/50">Task Name</div>
-                    <div className="w-24 flex-shrink-0 px-2 py-2 font-semibold bg-muted/50 text-center">Start</div>
-                    <div className="w-24 flex-shrink-0 px-2 py-2 font-semibold bg-muted/50 text-center">End</div>
+                    <div className="w-64 flex-shrink-0 px-2 py-2 font-semibold bg-muted/50 text-sm">Task Name</div>
+                    <div className="w-24 flex-shrink-0 px-2 py-2 font-semibold bg-muted/50 text-center text-xs">Start</div>
+                    <div className="w-24 flex-shrink-0 px-2 py-2 font-semibold bg-muted/50 text-center text-xs">End</div>
                     <div className="flex-1 relative bg-muted/30">
                         <div className="flex h-full">
                             {months.map((month, i) => (
                                 <div
                                     key={i}
-                                    className="border-l border-border text-xs text-center py-2"
+                                    className="border-l border-border text-[10px] text-center py-2 truncate"
                                     style={{ width: `${month.widthPercent}%` }}
                                 >
                                     {month.name}
@@ -286,11 +286,11 @@ const CriticalPathChart: React.FC<{ activities: P6Activity[] }> = ({ activities 
 
                     return (
                         <div key={index} className="flex border-b border-border hover:bg-muted/20">
-                            <div className="w-64 flex-shrink-0 px-2 py-2 text-sm truncate">{task.name}</div>
-                            <div className="w-24 flex-shrink-0 px-2 py-2 text-xs text-center text-muted-foreground">
+                            <div className="w-64 flex-shrink-0 px-2 py-2 text-xs truncate">{task.name}</div>
+                            <div className="w-24 flex-shrink-0 px-2 py-2 text-[10px] text-center text-muted-foreground">
                                 {task.startDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                             </div>
-                            <div className="w-24 flex-shrink-0 px-2 py-2 text-xs text-center text-muted-foreground">
+                            <div className="w-24 flex-shrink-0 px-2 py-2 text-[10px] text-center text-muted-foreground">
                                 {task.endDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                             </div>
                             <div className="flex-1 relative py-2 px-1">
@@ -310,7 +310,7 @@ const CriticalPathChart: React.FC<{ activities: P6Activity[] }> = ({ activities 
                                         style={{ width: `${task.progress}%` }}
                                     />
                                     {/* Progress text */}
-                                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-xs font-medium text-white">
+                                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] font-medium text-white">
                                         {task.progress}%
                                     </span>
                                 </div>
@@ -319,13 +319,20 @@ const CriticalPathChart: React.FC<{ activities: P6Activity[] }> = ({ activities 
                     );
                 })}
 
-                {/* Today line overlay */}
+                {/* Today line overlay - positioned relative to the timeline area */}
                 {todayPercent >= 0 && todayPercent <= 100 && (
-                    <div
-                        className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
-                        style={{ left: `calc(${64 + 24 + 24}px + ${todayPercent}%)` }}
+                    <div 
+                        className="absolute top-0 bottom-0 right-0 pointer-events-none z-10" 
+                        style={{ left: '448px' }} // Offset for Task Name (256) + Start (96) + End (96)
                     >
-                        <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-red-500 font-medium">TODAY</span>
+                        <div
+                            className="absolute top-0 bottom-0 w-0.5 bg-red-500"
+                            style={{ left: `${todayPercent}%` }}
+                        >
+                            <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] text-red-500 font-medium bg-background px-1 border border-red-500 rounded-sm whitespace-nowrap">
+                                TODAY
+                            </span>
+                        </div>
                     </div>
                 )}
             </div>

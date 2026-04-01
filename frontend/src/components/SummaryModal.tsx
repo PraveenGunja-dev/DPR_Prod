@@ -13,6 +13,8 @@ interface SummaryModalProps {
     projectName: string;
 }
 
+const EMPTY_ARRAY: any[] = [];
+
 export const SummaryModal: React.FC<SummaryModalProps> = ({
     isOpen,
     onClose,
@@ -94,11 +96,11 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
                     ) : activeView === 'table' ? (
                         <DPRSummarySection
                             p6Activities={p6Activities}
-                            dpQtyData={[]}
-                            dpBlockData={[]}
-                            dpVendorBlockData={[]}
-                            dpVendorIdtData={[]}
-                            manpowerDetailsData={[]}
+                            dpQtyData={EMPTY_ARRAY}
+                            dpBlockData={EMPTY_ARRAY}
+                            dpVendorBlockData={EMPTY_ARRAY}
+                            dpVendorIdtData={EMPTY_ARRAY}
+                            manpowerDetailsData={EMPTY_ARRAY}
                         />
                     ) : (
                         <SummaryCharts p6Activities={p6Activities} />

@@ -169,7 +169,7 @@ export const ProjectListing: React.FC<ProjectListingProps> = ({ projects, onProj
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex items-center gap-2 text-secondary border-secondary/30 hover:bg-secondary/10"
+                    className="flex items-center gap-2 text-secondary border-secondary/30"
                     onClick={(e) => {
                       e.stopPropagation();
                       onAssignClick(project);
@@ -187,7 +187,7 @@ export const ProjectListing: React.FC<ProjectListingProps> = ({ projects, onProj
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex items-center gap-2 text-blue-600 border-blue-600/30 hover:bg-blue-600/10"
+                    className="flex items-center gap-2 text-blue-600 border-blue-600/30"
                     onClick={(e) => {
                       e.stopPropagation();
                       onSyncClick(project);
@@ -205,7 +205,7 @@ export const ProjectListing: React.FC<ProjectListingProps> = ({ projects, onProj
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex items-center gap-2 text-primary border-primary/30 hover:bg-primary/10"
+                    className="flex items-center gap-2 text-primary border-primary/30"
                     onClick={(e) => {
                       e.stopPropagation();
                       onSummaryClick(project);

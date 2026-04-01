@@ -62,20 +62,6 @@ export const AssignProjectModal: React.FC<AssignProjectModalProps> = ({
     }
   }, [isOpen]);
 
-  if (!isOpen || !user) return null;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (selectedProjects.length === 0) return;
-
-    await onAssign(user.ObjectId, selectedProjects, selectedSheets);
-    setSelectedProjects([]);
-    setSelectedSheets([]);
-  };
-
-  // Get currently assigned project IDs
-  const assignedProjectIds = assignedProjects.map(p => p.id || p.ObjectId);
-
   // Extract FY year or fallback to StartDate (April-March FY)
   const extractFY = (project: any): string => {
     const p6Id = project.P6Id || project.p6Id || project.Id || '';
@@ -107,6 +93,20 @@ export const AssignProjectModal: React.FC<AssignProjectModalProps> = ({
     });
     return Array.from(years).sort();
   }, [allProjects]);
+
+  if (!isOpen || !user) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedProjects.length === 0) return;
+
+    await onAssign(user.ObjectId, selectedProjects, selectedSheets);
+    setSelectedProjects([]);
+    setSelectedSheets([]);
+  };
+
+  // Get currently assigned project IDs
+  const assignedProjectIds = assignedProjects.map(p => p.id || p.ObjectId);
 
   // Filter out already assigned projects and apply modal filters
   const availableProjects = allProjects.filter(p => {
