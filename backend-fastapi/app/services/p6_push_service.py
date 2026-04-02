@@ -12,7 +12,23 @@ Sheets supported:
 import logging
 import json
 from typing import Any, Optional
-from datetime import datetime
+from datetime import datetime, date as dt_date
+
+def parse_date(date_val: Any) -> Optional[dt_date]:
+    """Helper to parse various date formats into a date object."""
+    if not date_val:
+        return None
+    if isinstance(date_val, dt_date):
+        return date_val
+    if isinstance(date_val, datetime):
+        return date_val.date()
+    try:
+        # P6 often returns dates in YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS
+        if 'T' in str(date_val):
+            return datetime.fromisoformat(str(date_val)).date()
+        return datetime.strptime(str(date_val), "%Y-%m-%d").date()
+    except Exception:
+        return None
 
 from app.services.p6_token_service import get_valid_p6_token, get_http_client
 from app.config import settings
@@ -47,8 +63,8 @@ async def _get_resource_assignments_for_activity(pool, activity_object_id: int, 
             FROM solar_resource_assignments
             WHERE activity_object_id = $1
               AND project_object_id = $2
-              AND (UPPER(resource_id) LIKE CONCAT('%', 'MT', '%') OR resource_type = 'Material')
-              AND UPPER(resource_id) NOT LIKE CONCAT('%', 'NL', '%')
+              AND (UPPER(resource_id) LIKE CONCAT('%%', 'MT', '%%') OR resource_type = 'Material')
+              AND UPPER(resource_id) NOT LIKE CONCAT('%%', 'NL', '%%')
         """, activity_object_id, project_id)
     else:  # MP
         rows = await pool.fetch("""
@@ -57,8 +73,8 @@ async def _get_resource_assignments_for_activity(pool, activity_object_id: int, 
             FROM solar_resource_assignments
             WHERE activity_object_id = $1
               AND project_object_id = $2
-              AND UPPER(resource_id) LIKE CONCAT('%', 'MP', '%')
-              AND UPPER(resource_id) NOT LIKE CONCAT('%', 'NL', '%')
+              AND UPPER(resource_id) LIKE CONCAT('%%', 'MP', '%%')
+              AND UPPER(resource_id) NOT LIKE CONCAT('%%', 'NL', '%%')
         """, activity_object_id, project_id)
 
     return [dict(r) for r in rows]
@@ -369,6 +385,14 @@ async def push_approved_entry_to_p6(
             if new_totals:
                 await pool.execute("UPDATE solar_activities SET cumulative = $1, balance = $2 WHERE object_id = $3", 
                                  float(new_totals["total_actual"] or 0), float(new_totals["total_remaining"] or 0), act_obj_id)
+
+    # FINAL STEP: Update the entry status and track pushed_by
+    if not dry_run and pushed > 0:
+        await pool.execute("""
+            UPDATE dpr_supervisor_entries 
+            SET status = 'pushed_to_p6', pushed_at = CURRENT_TIMESTAMP, pushed_by = $1
+            WHERE id = $2
+        """, pushed_by, entry_id)
 
     summary = {
         "success": failed == 0,

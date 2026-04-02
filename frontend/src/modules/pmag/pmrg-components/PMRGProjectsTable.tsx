@@ -61,9 +61,9 @@ export const PMRGProjectsTable: React.FC<PMRGProjectsTableProps> = ({ projects, 
       // Search term
       if (searchTerm) {
         const search = searchTerm.toLowerCase();
-        const matchesName = project.Name?.toLowerCase().includes(search);
-        const matchesLocation = project.Location?.toLowerCase().includes(search);
-        const matchesId = project.ObjectId?.toString().includes(search);
+        const matchesName = (project.Name || "").toLowerCase().includes(search);
+        const matchesLocation = (project.Location || "").toLowerCase().includes(search);
+        const matchesId = (project.ObjectId || "").toString().includes(search);
         if (!matchesName && !matchesLocation && !matchesId) return false;
       }
 

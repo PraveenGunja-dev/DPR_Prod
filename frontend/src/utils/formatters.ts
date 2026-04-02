@@ -66,12 +66,21 @@ export const getStatusVariant = (status: string | undefined): "default" | "secon
 export const getSheetTypeLabel = (sheetType: string | undefined): string => {
     if (!sheetType) return "Unknown Type";
     const labels: Record<string, string> = {
+        // Solar
         dp_qty: "DP Qty",
         dp_block: "DP Block",
         dp_vendor_idt: "Vendor IDT",
         dp_vendor_block: "Vendor Block",
         mms_module_rfi: "MMS/RFI",
         manpower_details: "Manpower",
+        // Wind
+        wind_summary: "Wind Summary",
+        wind_progress: "Wind Progress",
+        wind_manpower: "Wind Manpower",
+        // PSS
+        pss_summary: "PSS Summary",
+        pss_progress: "PSS Progress",
+        pss_manpower: "PSS Manpower",
     };
     return labels[sheetType] || sheetType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };

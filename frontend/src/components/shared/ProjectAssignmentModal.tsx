@@ -12,19 +12,9 @@ import {
     getProjectSitePMs
 } from "@/services/projectService";
 import { getAllSupervisors, getAllSitePMs } from "@/services/userService";
+import { getProjectTypeConfig } from "@/config/sheetConfig";
+import { Project, User } from "@/types";
 
-interface Project {
-    ObjectId: number;
-    Name: string;
-    Location?: string;
-}
-
-interface User {
-    ObjectId: number;
-    Name: string;
-    Email: string;
-    Role?: string;
-}
 
 interface ProjectAssignmentModalProps {
     isOpen: boolean;
@@ -34,7 +24,9 @@ interface ProjectAssignmentModalProps {
     userRole?: string;
 }
 
-const AVAILABLE_SHEETS = [
+// Dynamic sheet list based on project type — computed inside the component
+// Fallback for Solar if project type is not set
+const SOLAR_SHEETS = [
     { id: 'dp_qty', label: 'Daily Progress Quantity' },
     { id: 'manpower_details', label: 'Manpower Details' },
     { id: 'dp_vendor_block', label: 'DP Vendor Block' },
@@ -72,6 +64,19 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
 
     // Track changes to trigger refresh on close
     const hasChanges = React.useRef(false);
+
+    // Compute available sheets based on the project's type
+    const availableSheets = React.useMemo(() => {
+        const pt = ((project as any)?.projectType || (project as any)?.ProjectType || (project as any)?.project_type || 'solar').toString().toLowerCase();
+        if (pt === 'solar' || pt === 'other') {
+            return SOLAR_SHEETS;
+        }
+        // For wind/pss, get sheets from config (exclude 'issues' since it's shared/always accessible)
+        const config = getProjectTypeConfig(pt);
+        return config.sheets
+            .filter(s => s.id !== 'issues')
+            .map(s => ({ id: s.id, label: s.label }));
+    }, [project]);
 
     // Fetch data when modal opens
     useEffect(() => {
@@ -133,9 +138,13 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
 
     // Initial click on a user
     const handleUserClick = (user: User, role: 'supervisor' | 'sitepm') => {
+        if (!user.ObjectId) {
+            toast.error("User ID is missing");
+            return;
+        }
         const userIdStr = String(user.ObjectId);
         const assignedList = role === 'supervisor' ? assignedSupervisors : assignedSitePMs;
-        const assignment = assignedList.find(a => String(a.ObjectId) === userIdStr);
+        const assignment = assignedList.find(a => String(a.ObjectId || "") === userIdStr);
 
         if (assignment) {
             // Already assigned - open modal to edit or give option to unassign
@@ -154,7 +163,7 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
 
     // Finalize assignment after sheet selection
     const confirmAssignment = async () => {
-        if (!project || !pendingUser) return;
+        if (!project || !pendingUser || !pendingUser.ObjectId) return;
 
         setLoading(true);
         try {
@@ -185,6 +194,7 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
     };
 
     const handleUnassign = async () => {
+        if (!pendingUser?.ObjectId) return;
         try {
             setLoading(true);
             const pId = project.ObjectId || (project as any).id || (project as any).objectId;
@@ -221,32 +231,32 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
     // Filter and sort functions
     const filteredSitePMs = sitePMs
         .filter(pm =>
-            pm.Name.toLowerCase().includes(sitePMSearchTerm.toLowerCase()) ||
-            pm.Email.toLowerCase().includes(sitePMSearchTerm.toLowerCase())
+            (pm.Name || "").toLowerCase().includes(sitePMSearchTerm.toLowerCase()) ||
+            (pm.Email || "").toLowerCase().includes(sitePMSearchTerm.toLowerCase())
         )
         .sort((a, b) => {
-            const aAssigned = assignedSitePMIds.includes(String(a.ObjectId));
-            const bAssigned = assignedSitePMIds.includes(String(b.ObjectId));
+            const aAssigned = assignedSitePMIds.includes(String(a.ObjectId || ""));
+            const bAssigned = assignedSitePMIds.includes(String(b.ObjectId || ""));
             // Assigned users first
             if (aAssigned && !bAssigned) return -1;
             if (!aAssigned && bAssigned) return 1;
             // Then alphabetical
-            return a.Name.localeCompare(b.Name);
+            return (a.Name || "").localeCompare(b.Name || "");
         });
 
     const filteredSupervisors = supervisors
         .filter(sup =>
-            sup.Name.toLowerCase().includes(supervisorSearchTerm.toLowerCase()) ||
-            sup.Email.toLowerCase().includes(supervisorSearchTerm.toLowerCase())
+            (sup.Name || "").toLowerCase().includes(supervisorSearchTerm.toLowerCase()) ||
+            (sup.Email || "").toLowerCase().includes(supervisorSearchTerm.toLowerCase())
         )
         .sort((a, b) => {
-            const aAssigned = assignedSupervisorIds.includes(String(a.ObjectId));
-            const bAssigned = assignedSupervisorIds.includes(String(b.ObjectId));
+            const aAssigned = assignedSupervisorIds.includes(String(a.ObjectId || ""));
+            const bAssigned = assignedSupervisorIds.includes(String(b.ObjectId || ""));
             // Assigned users first
             if (aAssigned && !bAssigned) return -1;
             if (!aAssigned && bAssigned) return 1;
             // Then alphabetical
-            return a.Name.localeCompare(b.Name);
+            return (a.Name || "").localeCompare(b.Name || "");
         });
 
     // Reset state on close
@@ -336,8 +346,8 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
                                                     }`}
                                             >
                                                 <div className="min-w-0">
-                                                    <div className="font-medium text-sm truncate">{pm.Name}</div>
-                                                    <div className="text-xs text-muted-foreground truncate">{pm.Email}</div>
+                                                    <div className="font-medium text-sm truncate">{pm.Name || "Unnamed User"}</div>
+                                                    <div className="text-xs text-muted-foreground truncate">{pm.Email || "No Email"}</div>
                                                 </div>
                                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center ${assignedSitePMIds.includes(String(pm.ObjectId))
                                                     ? "bg-primary text-white"
@@ -392,8 +402,8 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
                                                 }`}
                                         >
                                             <div className="min-w-0">
-                                                <div className="font-medium text-sm truncate">{sup.Name}</div>
-                                                <div className="text-xs text-muted-foreground truncate">{sup.Email}</div>
+                                                <div className="font-medium text-sm truncate">{sup.Name || "Unnamed User"}</div>
+                                                <div className="text-xs text-muted-foreground truncate">{sup.Email || "No Email"}</div>
                                             </div>
                                             <div className={`w-6 h-6 rounded-full flex items-center justify-center ${assignedSupervisorIds.includes(String(sup.ObjectId))
                                                 ? "bg-secondary text-white"
@@ -450,7 +460,7 @@ export const ProjectAssignmentModal: React.FC<ProjectAssignmentModalProps> = ({
                         </p>
                     </div>
                     <div className="grid grid-cols-1 gap-2">
-                        {AVAILABLE_SHEETS.map(sheet => (
+                        {availableSheets.map(sheet => (
                             <div
                                 key={sheet.id}
                                 onClick={() => toggleSheetSelection(sheet.id)}

@@ -220,7 +220,8 @@ export const PMAssignProjectModal: React.FC<PMAssignProjectModalProps> = ({
                 // Filter projects based on search term
                 projects
                   .filter(project => {
-                    const matchesSearch = project.Name.toLowerCase().includes(projectSearchTerm.toLowerCase());
+                    const name = project.Name || project.name || "";
+                    const matchesSearch = name.toLowerCase().includes(projectSearchTerm.toLowerCase());
                     const fy = extractFY(project);
                     const matchesYear = projectYearFilter === 'ALL' || fy === projectYearFilter;
                     return matchesSearch && matchesYear;
@@ -244,7 +245,7 @@ export const PMAssignProjectModal: React.FC<PMAssignProjectModalProps> = ({
                           onChange={() => toggleProjectSelection(value)}
                           className="mr-2 h-4 w-4 flex-shrink-0 rounded border-border"
                         />
-                        <div className="font-medium text-sm truncate">{project.Name}</div>
+                        <div className="font-medium text-sm truncate">{project.Name || project.name}</div>
                       </div>
                     );
                   })
@@ -276,10 +277,12 @@ export const PMAssignProjectModal: React.FC<PMAssignProjectModalProps> = ({
               {supervisors && supervisors.length > 0 ? (
                 // Filter supervisors based on search term
                 supervisors
-                  .filter(supervisor =>
-                    supervisor.Name.toLowerCase().includes(supervisorSearchTerm.toLowerCase()) ||
-                    supervisor.Email.toLowerCase().includes(supervisorSearchTerm.toLowerCase())
-                  )
+                  .filter(supervisor => {
+                    const name = supervisor.Name || supervisor.name || "";
+                    const email = supervisor.Email || supervisor.email || "";
+                    return name.toLowerCase().includes(supervisorSearchTerm.toLowerCase()) ||
+                      email.toLowerCase().includes(supervisorSearchTerm.toLowerCase());
+                  })
                   .map((supervisor) => {
                     const value = (supervisor.ObjectId || supervisor.id || '').toString();
 
@@ -300,8 +303,8 @@ export const PMAssignProjectModal: React.FC<PMAssignProjectModalProps> = ({
                           className="mr-2 h-4 w-4 flex-shrink-0 rounded border-border"
                         />
                         <div className="min-w-0">
-                          <div className="font-medium text-sm truncate">{supervisor.Name}</div>
-                          <div className="text-xs text-muted-foreground truncate">{supervisor.Email}</div>
+                          <div className="font-medium text-sm truncate">{supervisor.Name || supervisor.name}</div>
+                          <div className="text-xs text-muted-foreground truncate">{supervisor.Email || supervisor.email}</div>
                         </div>
                       </div>
                     );

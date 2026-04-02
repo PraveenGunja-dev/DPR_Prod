@@ -48,8 +48,17 @@ import {
   MmsModuleRfiTableWithDynamicColumns,
   IssueFormModal,
   IssuesTable,
-  DPRSummarySection
+  DPRSummarySection,
+  // Wind components
+  WindSummaryTable,
+  WindProgressTable,
+  WindManpowerTable,
+  // PSS components
+  PSSSummaryTable,
+  PSSProgressTable,
+  PSSManpowerTable,
 } from "./components";
+import { getProjectTypeConfig } from "@/config/sheetConfig";
 import {
   Select,
   SelectContent,
@@ -74,6 +83,7 @@ interface Issue {
   remarks: string;
   attachment: File | null;
   attachmentName: string | null;
+  projectName?: string;
 }
 
 const SupervisorDashboard = () => {
@@ -139,9 +149,17 @@ const SupervisorDashboard = () => {
   const hasAccessToSheet = (sheetType: string) => {
     if (user?.Role !== 'supervisor') return true;
 
-    // In projects page, it provides projectDetails.SheetTypes
-    // From backend login, it might be project.SheetTypes
-    // From local db map, it might be project.sheet_types
+    // Get the project type from the current project
+    const pt = (currentProject?.projectType || currentProject?.ProjectType || currentProject?.project_type || 'solar').toString().toLowerCase();
+
+    // For non-solar projects (wind/pss), check if the sheet belongs to that project type's config
+    // If it does, allow access (all sheets for the project type are accessible by default)
+    if (pt !== 'solar') {
+      const typeConfig = getProjectTypeConfig(pt);
+      return typeConfig.sheets.some(s => s.id === sheetType);
+    }
+
+    // Solar: use the existing per-supervisor sheet permissions
     let permittedSheets = currentProject?.sheetTypes || currentProject?.SheetTypes || currentProject?.sheet_types || [];
 
     // Ensure it's an array (in case it comes through stringified somehow)
@@ -155,6 +173,15 @@ const SupervisorDashboard = () => {
     return permittedSheets.includes(sheetType);
   };
 
+  // Derive project type from current project
+  const currentProjectType = useMemo(() => {
+    const pt = currentProject?.projectType || currentProject?.ProjectType || currentProject?.project_type || 'solar';
+    return (pt as string).toLowerCase();
+  }, [currentProject]);
+
+  // Get config for current project type
+  const projectTypeConfig = useMemo(() => getProjectTypeConfig(currentProjectType), [currentProjectType]);
+
   const formatSheetType = (sheetId: string) => {
     const sheetMap: Record<string, string> = {
       'dp_qty': 'DP Qty',
@@ -162,9 +189,16 @@ const SupervisorDashboard = () => {
       'dp_vendor_block': 'Vendor Block',
       'dp_block': 'DP Block',
       'dp_vendor_idt': 'Vendor IDT',
+      'wind_summary': 'Summary',
+      'wind_progress': 'Progress',
+      'wind_manpower': 'Manpower',
+      'pss_summary': 'Summary',
+      'pss_progress': 'Progress',
+      'pss_manpower': 'Manpower',
     };
     return sheetMap[sheetId] || sheetId;
   };
+
 
   // P6 Activities state
   const [p6Activities, setP6Activities] = useState<P6Activity[]>([]);
@@ -221,25 +255,37 @@ const SupervisorDashboard = () => {
     return ["ALL", ...Array.from(packages).sort()];
   }, [p6Activities]);
 
-  // Reset filter when project changes
+  // Reset filter and active tab when project changes
   useEffect(() => {
     setSelectedBlock("ALL");
+    setSelectedSubstation("ALL");
+    setSelectedSPV("ALL");
+    setSelectedLocation("ALL");
     if (currentProjectId) {
       loadProjectFilter(currentProjectId);
     }
-  }, [currentProjectId]);
+    // Reset active tab to first sheet of the new project type config
+    // Only reset if the current activeTab is NOT valid for the new project type
+    if (projectTypeConfig?.sheets?.length > 0) {
+      const validTabIds = projectTypeConfig.sheets.map(s => s.id);
+      if (!validTabIds.includes(activeTab)) {
+        setActiveTab(projectTypeConfig.sheets[0].id);
+      }
+    }
+  }, [currentProjectId, projectTypeConfig]);
 
 
 
   // Effect to update state when location changes
   useEffect(() => {
     const locationState = location.state || {};
-    const newActiveTab = locationState.activeTab || "summary";
+    const newActiveTab = locationState.activeTab || null; // Don't fallback to 'summary' — let project type config decide
     const newProjectId = locationState.projectId || null;
 
-    // Always update the state when location changes, regardless of current values
-    // This ensures that even if the values are the same, we still process the new location state
-    setActiveTab(newActiveTab);
+    // Only set activeTab from location state if one was explicitly provided
+    if (newActiveTab) {
+      setActiveTab(newActiveTab);
+    }
     setCurrentProjectId(newProjectId);
   }, [location]);
 
@@ -359,6 +405,47 @@ const SupervisorDashboard = () => {
   // Resource Table state
   const [resourceData, setResourceData] = useState<any[]>([]);
   const [isResourcesFetched, setIsResourcesFetched] = useState(false);
+
+  // ============================================================================
+  // WIND DATA STATES
+  // ============================================================================
+  const [windSummaryData, setWindSummaryData] = useState<any[]>([]);
+  const [windProgressData, setWindProgressData] = useState<any[]>([]);
+  const [windManpowerData, setWindManpowerData] = useState<any[]>([]);
+
+  // Wind-specific filter states
+  const [selectedSubstation, setSelectedSubstation] = useState<string>('ALL');
+  const [selectedSPV, setSelectedSPV] = useState<string>('ALL');
+  const [selectedLocation, setSelectedLocation] = useState<string>('ALL');
+
+  // Unique substations/SPVs/locations for wind filters
+  const uniqueSubstations = useMemo(() => {
+    if (currentProjectType !== 'wind') return ['ALL'];
+    const set = new Set<string>();
+    windProgressData.forEach(r => { if (r.substation) set.add(r.substation); });
+    return ['ALL', ...Array.from(set).sort()];
+  }, [currentProjectType, windProgressData]);
+
+  const uniqueSPVs = useMemo(() => {
+    if (currentProjectType !== 'wind') return ['ALL'];
+    const set = new Set<string>();
+    windProgressData.forEach(r => { if (r.spv) set.add(r.spv); });
+    return ['ALL', ...Array.from(set).sort()];
+  }, [currentProjectType, windProgressData]);
+
+  const uniqueLocations = useMemo(() => {
+    if (currentProjectType !== 'wind') return ['ALL'];
+    const set = new Set<string>();
+    windProgressData.forEach(r => { if (r.locations) set.add(r.locations); });
+    return ['ALL', ...Array.from(set).sort()];
+  }, [currentProjectType, windProgressData]);
+
+  // ============================================================================
+  // PSS DATA STATES
+  // ============================================================================
+  const [pssSummaryData, setPssSummaryData] = useState<any[]>([]);
+  const [pssProgressData, setPssProgressData] = useState<any[]>([]);
+  const [pssManpowerData, setPssManpowerData] = useState<any[]>([]);
 
   // Fetch P6 Resources
   const fetchP6Resources = useCallback(async () => {
@@ -529,6 +616,28 @@ const SupervisorDashboard = () => {
             // For MMS/RFI, just apply draft data directly as it's not P6-based
             if (data.rows) setMmsModuleRfiData(data.rows);
             break;
+
+          // Wind sheets — manual data entry, apply draft directly
+          case 'wind_summary':
+            if (data.rows) setWindSummaryData(data.rows);
+            break;
+          case 'wind_progress':
+            if (data.rows) setWindProgressData(data.rows);
+            break;
+          case 'wind_manpower':
+            if (data.rows) setWindManpowerData(data.rows);
+            break;
+
+          // PSS sheets — manual data entry, apply draft directly
+          case 'pss_summary':
+            if (data.rows) setPssSummaryData(data.rows);
+            break;
+          case 'pss_progress':
+            if (data.rows) setPssProgressData(data.rows);
+            break;
+          case 'pss_manpower':
+            if (data.rows) setPssManpowerData(data.rows);
+            break;
         }
 
         // Mark this draft+tab as merged
@@ -564,9 +673,12 @@ const SupervisorDashboard = () => {
         setCurrentProjectId(projectIdToUse);
       }
 
-      // Always load/create draft entries for sheet tabs (needed for submit workflow)
-      // The draft entry tracks the submission status, separate from where table data comes from
-      if (projectIdToUse && activeTab !== 'issues' && activeTab !== 'supervisor_table' && activeTab !== 'summary') {
+      // Determine sheet configuration to see if it supports data entry
+      const projectConfig = getProjectTypeConfig(currentProjectType);
+      const sheetDef = projectConfig.sheets.find(s => s.id === activeTab);
+      const isDataEntrySheet = sheetDef?.dataEntry ?? false;
+
+      if (projectIdToUse && isDataEntrySheet) {
         try {
           console.log('Loading draft entry for projectId:', projectIdToUse, 'activeTab:', activeTab, 'targetDate:', targetDate);
           const draft = await getDraftEntry(projectIdToUse, activeTab, targetDate);
@@ -577,8 +689,8 @@ const SupervisorDashboard = () => {
           setCurrentDraftEntry(null);
         }
       } else {
-        // Non-sheet tabs or no project selected
-        console.log('No draft entry needed. activeTab:', activeTab, 'projectId:', projectIdToUse);
+        // Non-sheet tabs, summary tabs, or no project selected
+        console.log('No draft entry needed. activeTab:', activeTab, 'isDataEntrySheet:', isDataEntrySheet);
         setCurrentDraftEntry(null);
       }
     };
@@ -777,8 +889,11 @@ const SupervisorDashboard = () => {
 
 
 
-  // Override fetchP6Activities effect to also fetch resources
+  // Override fetchP6Activities effect to also fetch resources (SOLAR ONLY)
   useEffect(() => {
+    // P6 data fetching only applies to Solar projects
+    if (currentProjectType !== 'solar') return;
+
     // Include 'summary' tab so data loads on initial page load (summary is the default tab)
     const dataTabs = ['summary', 'dp_qty', 'dp_block', 'dp_vendor_block', 'dp_vendor_idt', 'manpower_details'];
 
@@ -792,7 +907,7 @@ const SupervisorDashboard = () => {
         fetchP6Resources();
       }
     }
-  }, [activeTab, currentProjectId, token, isP6DataFetched, isResourcesFetched, loadingActivities, fetchP6Activities, fetchP6Resources]);
+  }, [activeTab, currentProjectId, token, isP6DataFetched, isResourcesFetched, loadingActivities, fetchP6Activities, fetchP6Resources, currentProjectType]);
 
   // Handle Manual Sync
   const handleSyncP6 = async () => {
@@ -853,6 +968,13 @@ const SupervisorDashboard = () => {
         case 'dp_block': return dpBlockData;
         case 'dp_vendor_idt': return dpVendorIdtData;
         case 'mms_module_rfi': return mmsModuleRfiData;
+        // Wind/PSS — manual entry, no P6 pagination
+        case 'wind_summary': return windSummaryData;
+        case 'wind_progress': return windProgressData;
+        case 'wind_manpower': return windManpowerData;
+        case 'pss_summary': return pssSummaryData;
+        case 'pss_progress': return pssProgressData;
+        case 'pss_manpower': return pssManpowerData;
         default: return [];
       }
     }
@@ -922,8 +1044,8 @@ const SupervisorDashboard = () => {
     //   return;
     // }
 
-    // Wait for P6 data to load before allowing save
-    if (!isP6DataFetched) {
+    // Wait for P6 data to load before allowing save (solar only — wind/pss are manual)
+    if (currentProjectType === 'solar' && !isP6DataFetched) {
       toast.warning("Please wait for data to load before saving");
       return;
     }
@@ -952,6 +1074,15 @@ const SupervisorDashboard = () => {
           break;
         case 'manpower_details':
           dataToSave = { totalManpower, rows: fullRows };
+          break;
+        // Wind/PSS sheets — direct row save
+        case 'wind_summary':
+        case 'wind_progress':
+        case 'wind_manpower':
+        case 'pss_summary':
+        case 'pss_progress':
+        case 'pss_manpower':
+          dataToSave = { rows: fullRows };
           break;
         default:
           dataToSave = { rows: [] };
@@ -1160,6 +1291,7 @@ const SupervisorDashboard = () => {
           remarks: parsedData.remarks || backendIssue.resolution_notes || '',
           attachment: null,
           attachmentName: null,
+          projectName: projectName || (projectDetails as any)?.Name || (projectDetails as any)?.name || `ID: ${backendIssue.project_id}`
         };
       });
 
@@ -1236,6 +1368,7 @@ const SupervisorDashboard = () => {
         remarks: formData.remarks,
         attachment: formData.attachment,
         attachmentName: formData.attachment ? formData.attachment.name : null,
+        projectName: projectName,
       };
 
       setIssues([...issues, issue]);
@@ -1261,6 +1394,7 @@ const SupervisorDashboard = () => {
         remarks: formData.remarks,
         attachment: formData.attachment,
         attachmentName: formData.attachment ? formData.attachment.name : null,
+        projectName: projectName,
       };
       setIssues([...issues, issue]);
       setIsAddIssueModalOpen(false);
@@ -1648,6 +1782,157 @@ const SupervisorDashboard = () => {
             <IssuesTable issues={issues} onAddIssue={() => setIsAddIssueModalOpen(true)} />
           </>
         );
+
+      // ====================================================================
+      // WIND PROJECT SHEETS
+      // ====================================================================
+      case 'wind_summary':
+        return (
+          <WindSummaryTable
+            data={windSummaryData}
+            setData={setWindSummaryData}
+            onSave={isEntryReadOnly ? undefined : handleSaveEntry}
+            onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
+            isLocked={isEntryReadOnly}
+            status={entryStatus}
+            onExportAll={handleExportAllSheets}
+            projectId={currentProjectId}
+          />
+        );
+      case 'wind_progress':
+        return (
+          <>
+            {isRejected && rejectionReason && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-2 flex-shrink-0" />
+                  <div>
+                    <h4 className="text-red-800 font-medium">Entry Rejected by PM</h4>
+                    <p className="text-red-700 mt-1">Reason: {rejectionReason}</p>
+                    <p className="text-red-600 text-sm mt-2">Please review the feedback and make necessary corrections.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <WindProgressTable
+              data={windProgressData}
+              setData={setWindProgressData}
+              onSave={isEntryReadOnly ? undefined : handleSaveEntry}
+              onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
+              yesterday={targetYesterday}
+              today={targetDate}
+              isLocked={isEntryReadOnly}
+              status={entryStatus}
+              onExportAll={handleExportAllSheets}
+              projectId={currentProjectId}
+              selectedSubstation={selectedSubstation}
+              selectedSPV={selectedSPV}
+              selectedLocation={selectedLocation}
+            />
+          </>
+        );
+      case 'wind_manpower':
+        return (
+          <>
+            {isRejected && rejectionReason && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-2 flex-shrink-0" />
+                  <div>
+                    <h4 className="text-red-800 font-medium">Entry Rejected by PM</h4>
+                    <p className="text-red-700 mt-1">Reason: {rejectionReason}</p>
+                    <p className="text-red-600 text-sm mt-2">Please review the feedback and make necessary corrections.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <WindManpowerTable
+              data={windManpowerData}
+              setData={setWindManpowerData}
+              onSave={isEntryReadOnly ? undefined : handleSaveEntry}
+              onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
+              isLocked={isEntryReadOnly}
+              status={entryStatus}
+              onExportAll={handleExportAllSheets}
+              projectId={currentProjectId}
+            />
+          </>
+        );
+
+      // ====================================================================
+      // PSS PROJECT SHEETS
+      // ====================================================================
+      case 'pss_summary':
+        return (
+          <PSSSummaryTable
+            data={pssSummaryData}
+            setData={setPssSummaryData}
+            onSave={isEntryReadOnly ? undefined : handleSaveEntry}
+            onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
+            isLocked={isEntryReadOnly}
+            status={entryStatus}
+            onExportAll={handleExportAllSheets}
+            projectId={currentProjectId}
+          />
+        );
+      case 'pss_progress':
+        return (
+          <>
+            {isRejected && rejectionReason && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-2 flex-shrink-0" />
+                  <div>
+                    <h4 className="text-red-800 font-medium">Entry Rejected by PM</h4>
+                    <p className="text-red-700 mt-1">Reason: {rejectionReason}</p>
+                    <p className="text-red-600 text-sm mt-2">Please review the feedback and make necessary corrections.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <PSSProgressTable
+              data={pssProgressData}
+              setData={setPssProgressData}
+              onSave={isEntryReadOnly ? undefined : handleSaveEntry}
+              onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
+              yesterday={targetYesterday}
+              today={targetDate}
+              isLocked={isEntryReadOnly}
+              status={entryStatus}
+              onExportAll={handleExportAllSheets}
+              projectId={currentProjectId}
+            />
+          </>
+        );
+      case 'pss_manpower':
+        return (
+          <>
+            {isRejected && rejectionReason && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-2 flex-shrink-0" />
+                  <div>
+                    <h4 className="text-red-800 font-medium">Entry Rejected by PM</h4>
+                    <p className="text-red-700 mt-1">Reason: {rejectionReason}</p>
+                    <p className="text-red-600 text-sm mt-2">Please review the feedback and make necessary corrections.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <PSSManpowerTable
+              data={pssManpowerData}
+              setData={setPssManpowerData}
+              onSave={isEntryReadOnly ? undefined : handleSaveEntry}
+              onSubmit={isEntryReadOnly ? undefined : handleSubmitEntry}
+              todayDate={targetDate}
+              isLocked={isEntryReadOnly}
+              status={entryStatus}
+              onExportAll={handleExportAllSheets}
+              projectId={currentProjectId}
+            />
+          </>
+        );
+
       default:
         return (
           <div className="text-center py-8 text-muted-foreground">
@@ -1674,94 +1959,138 @@ const SupervisorDashboard = () => {
         >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-1">Daily Progress Report</h1>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1">
-                <div className="flex items-center gap-2">
-                  <p className="text-xs sm:text-sm text-muted-foreground font-medium">{currentProject?.Name || projectName}</p>
-                  <span className="text-[10px] sm:text-[11px] bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                    ID: {currentProjectId}
-                  </span>
-                </div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Daily Progress Report</h1>
+                {/* Date Selector — inline beside title */}
                 {user?.Role === 'supervisor' && (
-                  <div className="flex flex-wrap items-center gap-1 sm:gap-2">
-                    <div className="flex flex-wrap gap-1 border-r border-border pr-2 sm:pr-4">
-                      {(!currentProject?.sheetTypes || currentProject.sheetTypes.length === 0) ? (
-                        <span className="px-2 py-0.5 text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 rounded-full border border-emerald-200 dark:border-emerald-800 font-medium">
-                          All Sheets Access
-                        </span>
-                      ) : (
-                        currentProject.sheetTypes.map((sheet: string, idx: number) => (
-                          <span key={idx} className="px-2 py-0.5 text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-full border border-blue-200 dark:border-blue-800 font-medium">
-                            {formatSheetType(sheet)}
-                          </span>
-                        ))
-                      )}
-                    </div>
-
-                    {/* Date Selector for 7-day history view */}
-                    <div className="flex items-center gap-2 bg-background border border-border rounded-md px-2 py-1 shadow-sm">
-                      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Report Date:</span>
-                      <input
-                        type="date"
-                        value={targetDate}
-                        onChange={(e) => setTargetDate(e.target.value)}
-                        max={today}
-                        min={new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0]}
-                        className="bg-transparent text-xs border-none outline-none cursor-pointer font-medium"
-                      />
-                    </div>
+                  <div className="flex items-center gap-2 bg-background border border-border rounded-md px-2 py-1 shadow-sm">
+                    <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Report Date:</span>
+                    <input
+                      type="date"
+                      value={targetDate}
+                      onChange={(e) => setTargetDate(e.target.value)}
+                      max={today}
+                      min={new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0]}
+                      className="bg-transparent text-xs border-none outline-none cursor-pointer font-medium"
+                    />
                   </div>
                 )}
               </div>
             </div>
             <div className="flex items-center space-x-2 sm:space-x-3 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-              <div className="flex items-center shrink-0">
-                <span className="text-sm font-medium mr-2 whitespace-nowrap hidden lg:block">Activity Filter:</span>
-                <Select 
-                  value={universalFilter} 
-                  onValueChange={value => setUniversalFilter(value === "ALL" ? "" : value, currentProjectId || undefined)}
-                >
-                  <SelectTrigger className="h-9 w-[120px] md:w-[150px] bg-background">
-                    <SelectValue placeholder="All" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {uniquePackages.map(pkg => (
-                      <SelectItem key={pkg} value={pkg}>{pkg}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {/* Project Type & ID Badge */}
+              <div className={`flex items-center gap-2 px-2 py-1 text-[12px] font-semibold rounded-md border capitalize shrink-0 ${
+                currentProjectType === 'wind' ? 'bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/40 dark:text-teal-300 dark:border-teal-800'
+                : currentProjectType === 'pss' ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-800'
+                : 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/40 dark:text-orange-300 dark:border-orange-800'
+              }`}>
+                <span>{projectTypeConfig.label}</span>
+                <span className="opacity-40">|</span>
+                <span className="font-mono text-[11px] uppercase tracking-wider">ID: {currentProjectId}</span>
               </div>
 
-              <div className="flex items-center shrink-0">
-                <span className="text-sm font-medium mr-2 whitespace-nowrap hidden lg:block">Block:</span>
-                <Select value={selectedBlock} onValueChange={setSelectedBlock}>
-                  <SelectTrigger className="h-9 w-[120px] md:w-[150px] bg-background">
-                    <SelectValue placeholder="All Blocks" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {uniqueBlocks.map(block => (
-                      <SelectItem key={block} value={block}>
-                        {block === "ALL" ? "All Blocks" : block}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSyncP6}
-                disabled={isSyncing || loadingActivities}
-                className="flex items-center"
-              >
-                <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-                {isSyncing ? 'Syncing...' : 'Sync P6 Data'}
-              </Button>
+              {/* SOLAR FILTERS: Activity Filter + Block */}
+              {currentProjectType === 'solar' && (
+                <>
+                  <div className="flex items-center shrink-0">
+                    <span className="text-sm font-medium mr-2 whitespace-nowrap hidden lg:block">Activity Filter:</span>
+                    <Select 
+                      value={universalFilter} 
+                      onValueChange={value => setUniversalFilter(value === "ALL" ? "" : value, currentProjectId || undefined)}
+                    >
+                      <SelectTrigger className="h-9 w-[120px] md:w-[150px] bg-background">
+                        <SelectValue placeholder="All" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {uniquePackages.map(pkg => (
+                          <SelectItem key={pkg} value={pkg}>{pkg}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center shrink-0">
+                    <span className="text-sm font-medium mr-2 whitespace-nowrap hidden lg:block">Block:</span>
+                    <Select value={selectedBlock} onValueChange={setSelectedBlock}>
+                      <SelectTrigger className="h-9 w-[120px] md:w-[150px] bg-background">
+                        <SelectValue placeholder="All Blocks" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {uniqueBlocks.map(block => (
+                          <SelectItem key={block} value={block}>
+                            {block === "ALL" ? "All Blocks" : block}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+
+              {/* WIND FILTERS: Substation + SPV + Location */}
+              {currentProjectType === 'wind' && (
+                <>
+                  <div className="flex items-center shrink-0">
+                    <span className="text-sm font-medium mr-2 whitespace-nowrap hidden lg:block">Substation:</span>
+                    <Select value={selectedSubstation} onValueChange={setSelectedSubstation}>
+                      <SelectTrigger className="h-9 w-[120px] md:w-[140px] bg-background">
+                        <SelectValue placeholder="All" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {uniqueSubstations.map(s => (
+                          <SelectItem key={s} value={s}>{s === "ALL" ? "All" : s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center shrink-0">
+                    <span className="text-sm font-medium mr-2 whitespace-nowrap hidden lg:block">SPV:</span>
+                    <Select value={selectedSPV} onValueChange={setSelectedSPV}>
+                      <SelectTrigger className="h-9 w-[100px] md:w-[130px] bg-background">
+                        <SelectValue placeholder="All" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {uniqueSPVs.map(s => (
+                          <SelectItem key={s} value={s}>{s === "ALL" ? "All" : s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center shrink-0">
+                    <span className="text-sm font-medium mr-2 whitespace-nowrap hidden lg:block">Location:</span>
+                    <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+                      <SelectTrigger className="h-9 w-[120px] md:w-[140px] bg-background">
+                        <SelectValue placeholder="All" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {uniqueLocations.map(s => (
+                          <SelectItem key={s} value={s}>{s === "ALL" ? "All" : s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+
+              {/* Project Sync Button — only for Solar */}
+              {currentProjectType === 'solar' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSyncP6}
+                  disabled={isSyncing || loadingActivities}
+                  className="flex items-center shrink-0"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+                  {isSyncing ? 'Syncing...' : 'Sync Project'}
+                </Button>
+              )}
+
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => navigate("/projects")}
-                className="flex items-center"
+                className="flex items-center shrink-0"
               >
                 <FileSpreadsheet className="w-4 h-4 mr-2" />
                 Change Project
@@ -1805,91 +2134,29 @@ const SupervisorDashboard = () => {
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <div className="overflow-x-auto pb-2" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <TabsList className="inline-flex w-max min-w-full gap-1 p-1 rounded-lg bg-muted">
-                  <TabsTrigger value="summary" className="whitespace-nowrap px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background">
-                    Summary
-                  </TabsTrigger>
-                  {hasAccessToSheet('dp_qty') && (
-                    <TabsTrigger value="dp_qty" className="whitespace-nowrap px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background">
-                      DP Qty
-                    </TabsTrigger>
-                  )}
-                  {hasAccessToSheet('dp_block') && (
-                    <TabsTrigger value="dp_block" className="whitespace-nowrap px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background">
-                      DP Block
-                    </TabsTrigger>
-                  )}
-                  {hasAccessToSheet('dp_vendor_idt') && (
-                    <TabsTrigger value="dp_vendor_idt" className="whitespace-nowrap px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background">
-                      Vendor IDT
-                    </TabsTrigger>
-                  )}
-                  {hasAccessToSheet('dp_vendor_block') && (
-                    <TabsTrigger value="dp_vendor_block" className="whitespace-nowrap px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background">
-                      DP Vendor Block
-                    </TabsTrigger>
-                  )}
-                  {hasAccessToSheet('manpower_details') && (
-                    <TabsTrigger value="manpower_details" className="whitespace-nowrap px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background">
-                      Manpower
-                    </TabsTrigger>
-                  )}
-                  {hasAccessToSheet('mms_module_rfi') && (
-                    <TabsTrigger value="mms_module_rfi" className="whitespace-nowrap px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background">
-                      MMS & RFI
-                    </TabsTrigger>
-                  )}
-                  {hasAccessToSheet('resource') && (
-                    <TabsTrigger value="resource" className="whitespace-nowrap px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background">
-                      Machinery Sheet
-                    </TabsTrigger>
-                  )}
-                  <TabsTrigger value="issues" className="whitespace-nowrap px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background">
-                    Issue
-                  </TabsTrigger>
+                  {/* Config-driven tab rendering */}
+                  {projectTypeConfig.sheets.map(sheet => (
+                    hasAccessToSheet(sheet.id) && (
+                      <TabsTrigger
+                        key={sheet.id}
+                        value={sheet.id}
+                        className="whitespace-nowrap px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background"
+                      >
+                        {sheet.label}
+                      </TabsTrigger>
+                    )
+                  ))}
                 </TabsList>
               </div>
 
-              <TabsContent value="summary" className="mt-0 border-0 p-0 pt-4">
-                {renderActiveTable()}
-              </TabsContent>
-              {hasAccessToSheet('dp_qty') && (
-                <TabsContent value="dp_qty" className="mt-0 border-0 p-0 pt-4">
-                  {renderActiveTable()}
-                </TabsContent>
-              )}
-              {hasAccessToSheet('dp_block') && (
-                <TabsContent value="dp_block" className="mt-0 border-0 p-0 pt-4">
-                  {renderActiveTable()}
-                </TabsContent>
-              )}
-              {hasAccessToSheet('dp_vendor_idt') && (
-                <TabsContent value="dp_vendor_idt" className="mt-0 border-0 p-0 pt-4">
-                  {renderActiveTable()}
-                </TabsContent>
-              )}
-              {hasAccessToSheet('dp_vendor_block') && (
-                <TabsContent value="dp_vendor_block" className="mt-0 border-0 p-0 pt-4">
-                  {renderActiveTable()}
-                </TabsContent>
-              )}
-              {hasAccessToSheet('manpower_details') && (
-                <TabsContent value="manpower_details" className="mt-0 border-0 p-0 pt-4">
-                  {renderActiveTable()}
-                </TabsContent>
-              )}
-              {hasAccessToSheet('mms_module_rfi') && (
-                <TabsContent value="mms_module_rfi" className="mt-0 border-0 p-0 pt-4">
-                  {renderActiveTable()}
-                </TabsContent>
-              )}
-              {hasAccessToSheet('resource') && (
-                <TabsContent value="resource" className="mt-0 border-0 p-0 pt-4">
-                  {renderActiveTable()}
-                </TabsContent>
-              )}
-              <TabsContent value="issues" className="mt-0 border-0 p-0 pt-4">
-                {renderActiveTable()}
-              </TabsContent>
+              {/* Config-driven TabsContent */}
+              {projectTypeConfig.sheets.map(sheet => (
+                hasAccessToSheet(sheet.id) && (
+                  <TabsContent key={sheet.id} value={sheet.id} className="mt-0 border-0 p-0 pt-4">
+                    {renderActiveTable()}
+                  </TabsContent>
+                )
+              ))}
             </Tabs>
           </Card>
         </motion.div>

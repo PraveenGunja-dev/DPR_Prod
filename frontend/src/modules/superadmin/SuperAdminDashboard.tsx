@@ -1164,9 +1164,9 @@ const SuperAdminDashboard = () => {
                             if (searchTerm) {
                               const search = searchTerm.toLowerCase();
                               if (!(
-                                user.Name.toLowerCase().includes(search) ||
-                                user.Email.toLowerCase().includes(search) ||
-                                user.Role.toLowerCase().includes(search)
+                                (user.Name || "").toLowerCase().includes(search) ||
+                                (user.Email || "").toLowerCase().includes(search) ||
+                                (user.Role || "").toLowerCase().includes(search)
                               )) {
                                 return false;
                               }
@@ -1354,7 +1354,7 @@ const SuperAdminDashboard = () => {
                             if (searchTerm) {
                               const search = searchTerm.toLowerCase();
                               if (!(
-                                project.Name.toLowerCase().includes(search) ||
+                                (project.Name || "").toLowerCase().includes(search) ||
                                 (project.Location && project.Location.toLowerCase().includes(search))
                               )) {
                                 return false;

@@ -34,7 +34,15 @@ export const SuperAdminSheetEntries = ({ projects }: SuperAdminSheetEntriesProps
         { value: 'dp_vendor_idt', label: 'DP Vendor IDT' },
         { value: 'dp_vendor_block', label: 'DP Vendor Block' },
         { value: 'mms_module_rfi', label: 'MMS Module RFI' },
-        { value: 'manpower_details', label: 'Manpower Details' }
+        { value: 'manpower_details', label: 'Manpower Details' },
+        // Wind
+        { value: 'wind_summary', label: 'Wind Summary' },
+        { value: 'wind_progress', label: 'Wind Progress' },
+        { value: 'wind_manpower', label: 'Wind Manpower' },
+        // PSS
+        { value: 'pss_summary', label: 'PSS Summary' },
+        { value: 'pss_progress', label: 'PSS Progress' },
+        { value: 'pss_manpower', label: 'PSS Manpower' },
     ];
 
     const loadEntries = async () => {

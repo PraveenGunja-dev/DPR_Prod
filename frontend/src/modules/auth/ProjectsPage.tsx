@@ -275,7 +275,12 @@ const ProjectsPage = () => {
             <ProjectAssignmentModal isOpen={showAssignmentModal} onClose={() => setShowAssignmentModal(false)}
                 project={selectedAssignProject} onAssignmentComplete={fetchProjects} userRole={user?.role || user?.Role} />
 
-            <CreateUserModal isOpen={showCreateUserModal} onClose={() => setShowCreateUserModal(false)} onUserCreated={fetchProjects} />
+            <CreateUserModal 
+                isOpen={showCreateUserModal} 
+                onClose={() => setShowCreateUserModal(false)} 
+                onUserCreated={fetchProjects} 
+                userRole={user?.role || user?.Role}
+            />
         </DashboardLayout>
     );
 };

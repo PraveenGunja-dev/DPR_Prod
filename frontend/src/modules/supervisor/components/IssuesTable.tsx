@@ -15,6 +15,7 @@ interface Issue {
   remarks: string;
   attachment: File | null;
   attachmentName: string | null;
+  projectName?: string;
 }
 
 interface IssuesTableProps {
@@ -47,6 +48,7 @@ export function IssuesTable({ issues, onAddIssue }: IssuesTableProps) {
 
   // Define columns - memoized to prevent infinite renders in StyledExcelTable
   const columns = React.useMemo(() => [
+    "Project Name",
     "Description",
     "Priority",
     "Start Date",
@@ -60,6 +62,7 @@ export function IssuesTable({ issues, onAddIssue }: IssuesTableProps) {
 
   // Convert issues to table data - memoized
   const tableData = React.useMemo(() => issues.map(issue => [
+    issue.projectName || "N/A",
     issue.description,
     issue.priority,
     formatDate(issue.startDate),
