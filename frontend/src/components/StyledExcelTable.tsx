@@ -539,8 +539,8 @@ export const StyledExcelTable = ({
     const colName = typeof col === 'string' ? col : (col.column || col.label || '');
     const lowerColName = colName.toLowerCase();
 
-    // Light backgrounds with black text for both themes
-    let backgroundColor = "#f1f5f9"; // Light slate
+    // Default background color (Ash / Light Gray)
+    let backgroundColor = "#d1d5db"; 
     const textColor = "#000000"; // Black text
 
     // If auto-coloring is disabled, return default styles early
@@ -587,46 +587,21 @@ export const StyledExcelTable = ({
     }
 
     if (rowIndex === 1) {
-      backgroundColor = "#c6daf5ff";
+      backgroundColor = "#d1d5db"; // Stay ash for sub-headers
     } else if (rowIndex > 1) {
-      backgroundColor = "#c9def8ff";
+      backgroundColor = "#d1d5db";
     }
-
-    // Get today's and yesterday's date in local timezone (YYYY-MM-DD format)
-    // Format date in Indian style (DD-MM-YYYY)
-    const todayLocal = indianDateFormat(new Date());
-    const yesterdayDate = new Date();
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayLocal = indianDateFormat(yesterdayDate);
 
     // COLOR SCHEME:
-    // - Gray (default): P6 read-only data (not editable)
-    // - Green (#86efac): P6 editable fields (comes from P6 but user can edit)
-    // - Red (#fca5a5): Auto-calculated fields (not editable)
-    // - Blue (#93c5fd): User input fields (editable)
+    // - Green (#86efac): Completed as on column
+    // - Red (#fca5a5): Balance column (preserved as requested)
+    // - Ash (#d1d5db): Everything else
 
-    // Green - P6 editable fields
-    if (lowerColName.includes("uom") ||
-      lowerColName.includes("actual start") || lowerColName.includes("actual finish") ||
-      lowerColName.includes("actual/forecast start") || lowerColName.includes("actual/forecast finish") ||
-      lowerColName.includes("scope") || lowerColName.includes("front") ||
-      (lowerColName === "priority") || lowerColName.includes("contractor name") ||
-      lowerColName.includes("hold due to")) {
-      backgroundColor = "#86efac"; // Light green - P6 editable
+    if (lowerColName.includes("completed as on") || lowerColName.includes("% completion") || lowerColName.includes("percentage completion")) {
+      backgroundColor = "#86efac"; // Light green
+    } else if (lowerColName.includes("balance")) {
+      backgroundColor = "#fca5a5"; // Light red - preserved
     }
-    // Blue - User editable fields (Remarks and Today's date)
-    else if (lowerColName.includes("remarks") || lowerColName.includes("today") ||
-      (colName.match(/^\d{2}-\d{2}-\d{4}$/) && colName === todayLocal)) {
-      backgroundColor = "#93c5fd"; // Light blue - User editable
-    }
-    // Red - Auto-calculated fields (not editable)
-    else if (lowerColName.includes("balance") || lowerColName.includes("cumulative") ||
-      (lowerColName === "actual") || lowerColName === "completed" || lowerColName.includes("% completion") ||
-      lowerColName.includes("completion") || lowerColName.includes("completed as on")) {
-      backgroundColor = "#fca5a5"; // Light red - Calculated non-editable
-    }
-    // Gray (default) - P6 read-only fields and Yesterday column
-    // Yesterday column stays default gray as it's not editable
 
     return {
       backgroundColor,
@@ -1422,20 +1397,20 @@ export const StyledExcelTable = ({
                             readOnly={isReadOnly || !editableColumns.includes(colName) || !!rowStyle.isTotalRow}
                             onFocus={() => setActiveCell({ row: r, col })}
                             onKeyDown={(e) => {
-                              if (type === "number") {
-                                // Allow: backspace, delete, tab, escape, enter, decimal point
-                                if (
-                                  ["Backspace", "Delete", "Tab", "Escape", "Enter", ".", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].indexOf(e.key) !== -1 ||
-                                  // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
-                                  (e.ctrlKey === true || e.metaKey === true)
-                                ) {
-                                  return;
+                                if (type === "number") {
+                                  // Allow: backspace, delete, tab, escape, enter, decimal point, minus sign
+                                  if (
+                                    ["Backspace", "Delete", "Tab", "Escape", "Enter", ".", "-", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].indexOf(e.key) !== -1 ||
+                                    // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                                    (e.ctrlKey === true || e.metaKey === true)
+                                  ) {
+                                    return;
+                                  }
+                                  // Ensure that it is a number or minus sign and stop the keypress
+                                  if ((e.key < "0" || e.key > "9") && e.key !== "-") {
+                                    e.preventDefault();
+                                  }
                                 }
-                                // Ensure that it is a number and stop the keypress
-                                if ((e.key < "0" || e.key > "9")) {
-                                  e.preventDefault();
-                                }
-                              }
                             }}
                             onChange={(e) => {
                               if (type === "date") {
@@ -1449,12 +1424,11 @@ export const StyledExcelTable = ({
                                 handleCellChange(originalIndex, col, formatted);
                                 return;
                               }
-                              // Prevent negative values for number inputs
+                              // Allow empty value, "-", or valid numbers (including negative)
+                              // Helper regex to allow "123", "-123", "123.", "-123.45"
                               if (type === "number") {
                                 const inputValue = e.target.value;
-                                // Allow empty value or strictly positive numbers (no 'e')
-                                // Helper regex to allow "123", "123.", "123.45"
-                                if (inputValue === "" || /^\d*\.?\d*$/.test(inputValue)) {
+                                if (inputValue === "" || inputValue === "-" || /^-?\d*\.?\d*$/.test(inputValue)) {
                                   handleCellChange(originalIndex, col, inputValue);
                                 }
                                 return;

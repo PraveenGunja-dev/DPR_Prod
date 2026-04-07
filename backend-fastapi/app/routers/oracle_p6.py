@@ -330,30 +330,44 @@ async def get_yesterday_values(
         from datetime import datetime, timedelta
         targetDate = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
-    # Fetch values from dpr_daily_progress
     query = """
-        SELECT dp.activity_object_id as "activityObjectId", sa.name, sa.object_id as "activityId",
-               sa.activity_id as "stringActivityId",
-               dp.today_value as "yesterdayValue", dp.cumulative_value as "cumulativeValue",
-               dp.sheet_type as "sheetType",
-               TRUE as is_approved
-        FROM dpr_daily_progress dp
-        JOIN solar_activities sa ON dp.activity_object_id = sa.object_id
-        WHERE dp.progress_date = $1
+        WITH LatestProgress AS (
+            SELECT dp.activity_object_id, dp.sheet_type, MAX(dp.progress_date) as max_date
+            FROM dpr_daily_progress dp
+            JOIN solar_activities sa ON dp.activity_object_id = sa.object_id
+            WHERE dp.progress_date <= $1
     """
     params = [targetDate]
 
+    filter_clauses = ""
     # Add sheet_type filter if provided
     if sheet_type:
-        query += f" AND dp.sheet_type = ${len(params) + 1}"
+        filter_clauses += f" AND dp.sheet_type = ${len(params) + 1}"
         params.append(sheet_type)
 
     # Look up the ObjectId from the P6 Id if provided
     if projectObjectId:
         actual_project_object_id = await resolve_project_id(projectObjectId, pool)
         if actual_project_object_id:
-            query += f" AND sa.project_object_id = ${len(params) + 1}"
+            filter_clauses += f" AND sa.project_object_id = ${len(params) + 1}"
             params.append(actual_project_object_id)
+            
+    query += filter_clauses
+    query += """
+            GROUP BY dp.activity_object_id, dp.sheet_type
+        )
+        SELECT lp.activity_object_id as "activityObjectId", sa.name, sa.object_id as "activityId",
+               sa.activity_id as "stringActivityId",
+               CASE WHEN dp.progress_date = $1 THEN dp.today_value ELSE NULL END as "yesterdayValue",
+               dp.cumulative_value as "cumulativeValue",
+               dp.sheet_type as "sheetType",
+               TRUE as is_approved
+        FROM LatestProgress lp
+        JOIN dpr_daily_progress dp ON lp.activity_object_id = dp.activity_object_id 
+                                   AND lp.sheet_type = dp.sheet_type 
+                                   AND lp.max_date = dp.progress_date
+        JOIN solar_activities sa ON lp.activity_object_id = sa.object_id
+    """
 
     rows = await pool.fetch(query, *params)
     

@@ -112,6 +112,13 @@ const SupervisorDashboard = () => {
   // State for reactive project ID
   const [currentProjectId, setCurrentProjectId] = useState(projectIdFromLocation);
 
+  // Sync with location state if user navigates via Navbar dropdown
+  useEffect(() => {
+    if (projectIdFromLocation && projectIdFromLocation !== currentProjectId) {
+      setCurrentProjectId(projectIdFromLocation);
+    }
+  }, [projectIdFromLocation, currentProjectId]);
+
   // State for target date (last 7 days view)
   const [targetDate, setTargetDate] = useState<string>(today);
 
@@ -628,8 +635,8 @@ const SupervisorDashboard = () => {
         : currentDraftEntry.data_json;
 
       // Check if entry is read-only (submitted or approved)
-      // RELAXED FOR TESTING: Always allow editing for unrestricted submission workflow
-      const isReadOnly = false;
+      // Enforce read-only mode if the user is not a supervisor
+      const isReadOnly = (user?.Role && user.Role !== 'supervisor') || false;
       setIsEntryReadOnly(isReadOnly);
 
       // Apply draft data by merging with current state
@@ -706,7 +713,7 @@ const SupervisorDashboard = () => {
         mergedDraftIds.current.add(mergeKey);
       }
     } else {
-      setIsEntryReadOnly(false);
+      setIsEntryReadOnly((user?.Role && user.Role !== 'supervisor') || false);
     }
   }, [currentDraftEntry, activeTab, isP6DataFetched]);
 
@@ -718,7 +725,10 @@ const SupervisorDashboard = () => {
       // First, fetch assigned projects
       let projects: any[] = [];
       try {
-        projects = await getAssignedProjects();
+        const role = user?.role || user?.Role;
+        projects = (role === "supervisor" || role === "Site PM") 
+            ? await getAssignedProjects() 
+            : await getUserProjects();
         setAssignedProjects(projects);
       } catch (error) {
         console.log('Projects will be fetched from P6 API');
@@ -1132,8 +1142,8 @@ const SupervisorDashboard = () => {
           dataToSave = {
             staticHeader: {
               projectInfo: projectName,
-              reportingDate: today,
-              progressDate: yesterday
+              reportingDate: targetDate,
+              progressDate: targetYesterday
             },
             rows: fullRows
           };
@@ -1162,8 +1172,8 @@ const SupervisorDashboard = () => {
 
       console.log(`handleSaveEntry (OVERWRITE): Saving ${rowCount} modified rows for tab ${activeTab}`);
       
-      // Perform a full overwrite with just the delta rows to prevent legacy unmodified rows from accumulating
-      await saveDraftEntry(currentDraftEntry.id, dataToSave, false);
+      // Perform a partial update to preserve edits from previous sessions
+      await saveDraftEntry(currentDraftEntry.id, dataToSave, true);
       
       toast.success(`Updated ${rowCount} modified activities successfully!`);
     } catch (error) {
@@ -1229,7 +1239,7 @@ const SupervisorDashboard = () => {
             staticHeader: {
               projectInfo: projectName,
               reportingDate: targetDate,
-              progressDate: yesterday
+              progressDate: targetYesterday
             },
             rows: fullRows
           };
@@ -1248,8 +1258,8 @@ const SupervisorDashboard = () => {
       }
 
       console.log('executeSubmitEntry: Saving strictly modified delta data before submit', dataToSave);
-      // Pass false to overwrite the db snapshot with strictly the modified delta rows
-      await saveDraftEntry(currentDraftEntry.id, dataToSave, false);
+      // Pass true to accumulate strictly the modified delta rows
+      await saveDraftEntry(currentDraftEntry.id, dataToSave, true);
 
       // Then submit the entry, passing the edit reason if it's a past edit
       console.log('executeSubmitEntry: Submitting entry', currentDraftEntry.id);
@@ -1964,6 +1974,7 @@ const SupervisorDashboard = () => {
       userName={user?.Name || "User"}
       userRole={user?.Role || "supervisor"}
       projectName={projectName}
+      projectId={currentProjectId}
       projectP6Id={currentProject?.P6Id || (projectDetails as any)?.P6Id}
     >
       <div className="w-full h-[calc(100vh-120px)] flex flex-col">
@@ -1977,7 +1988,6 @@ const SupervisorDashboard = () => {
               <div className="flex items-center gap-3">
                 <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Daily Progress Report</h1>
                 {/* Date Selector — inline beside title */}
-                {user?.Role === 'supervisor' && (
                   <div className="flex items-center gap-2 bg-background border border-border rounded-md px-2 py-1 shadow-sm">
                     <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Report Date:</span>
                     <input
@@ -1989,7 +1999,6 @@ const SupervisorDashboard = () => {
                       className="bg-transparent text-xs border-none outline-none cursor-pointer font-medium"
                     />
                   </div>
-                )}
               </div>
             </div>
             <div className="flex items-center space-x-2 sm:space-x-3 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">

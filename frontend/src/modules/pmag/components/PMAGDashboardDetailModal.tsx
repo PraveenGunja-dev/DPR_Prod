@@ -176,7 +176,7 @@ export const PMAGDashboardDetailModal: React.FC<PMAGDashboardDetailModalProps> =
                           <h4 className="text-lg font-bold text-slate-800">{getSheetTypeLabel(entry.sheet_type)}</h4>
                           <p className="text-sm text-slate-500 font-medium flex items-center gap-1.5">
                              <User className="w-3.5 h-3.5" />
-                             {entry.supervisor_name} • {new Date(entry.submitted_at).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'})}
+                             {entry.supervisor_name} • {new Date(entry.entry_date || entry.submitted_at).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'})}
                           </p>
                        </div>
                     </div>
@@ -285,7 +285,7 @@ export const PMAGDashboardDetailModal: React.FC<PMAGDashboardDetailModalProps> =
                                     </span>
                                     <span className="flex items-center gap-1.5">
                                         <Calendar className="w-3.5 h-3.5" />
-                                        {entry.submitted_at ? new Date(entry.submitted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'N/A'}
+                                        {(entry.entry_date || entry.submitted_at) ? new Date(entry.entry_date || entry.submitted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'N/A'}
                                     </span>
                                 </div>
                             </div>

@@ -45,7 +45,7 @@ const App = () => (
                 <Route
                   path="/supervisor"
                   element={
-                    <ProtectedRoute requiredRole="supervisor">
+                    <ProtectedRoute requiredRole={["supervisor", "Site PM", "PMAG", "Super Admin"]}>
                       <SupervisorDashboard />
                     </ProtectedRoute>
                   }

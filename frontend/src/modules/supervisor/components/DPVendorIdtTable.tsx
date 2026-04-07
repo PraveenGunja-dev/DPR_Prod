@@ -369,7 +369,7 @@ export function DPVendorIdtTable({
         columnWidths={columnWidths}
         cellTextColors={cellTextColors}
         columnTextColors={{
-          "% Completion": "#74DB4B"
+          "% Completion": "#16a34a"
         }}
         columnFontWeights={{
           "% Completion": "bold"

@@ -4,7 +4,7 @@ import { Navigate } from 'react-router-dom';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: string;
+  requiredRole?: string | string[];
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
@@ -33,10 +33,16 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // If a specific role is required and user doesn't have it, redirect to projects
   if (requiredRole && user?.Role) {
-    const userRole = user.Role.toString().trim().toLowerCase();
-    const requiredRoleNormalized = requiredRole.trim().toLowerCase();
+    const userRoleLower = user.Role.toString().trim().toLowerCase();
+    
+    let isAllowed = false;
+    if (Array.isArray(requiredRole)) {
+      isAllowed = requiredRole.some(r => r.trim().toLowerCase() === userRoleLower);
+    } else {
+      isAllowed = requiredRole.trim().toLowerCase() === userRoleLower;
+    }
 
-    if (userRole !== requiredRoleNormalized) {
+    if (!isAllowed) {
       return <Navigate to="/projects" replace />;
     }
   }

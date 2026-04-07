@@ -324,7 +324,7 @@ export const SheetListModal: React.FC<SheetListModalProps> = ({
                                         )}
                                         <span className="flex items-center gap-1">
                                             <Calendar className="h-3 w-3" />
-                                            {formatDateString(entry.submitted_at || entry.updated_at || entry.created_at)}
+                                            {formatDateString(entry.entry_date || entry.submitted_at || entry.updated_at || entry.created_at)}
                                         </span>
                                     </div>
                                 </div>

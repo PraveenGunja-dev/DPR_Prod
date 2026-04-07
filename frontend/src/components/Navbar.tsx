@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion"
-import { Building2, User, LogOut, Users, FolderPlus, BarChart3, UserPlus, AlertCircle, Bell, Eye } from "lucide-react"
+import { Building2, User, LogOut, Users, FolderPlus, BarChart3, UserPlus, AlertCircle, Bell, Eye, FileText } from "lucide-react"
 import { Button } from "./ui/button"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/modules/auth/contexts/AuthContext"
@@ -23,6 +23,7 @@ interface NavbarProps {
   userName?: string
   userRole?: string
   projectName?: string
+  projectId?: string | number
   projectP6Id?: string | number
   onAddUser?: () => void
   onAddProject?: () => void
@@ -30,7 +31,7 @@ interface NavbarProps {
   onAddIssue?: () => void
 }
 
-export const Navbar = ({ userName, userRole, projectName, projectP6Id, onAddUser, onAddProject, onAssignProject, onAddIssue }: NavbarProps) => {
+export const Navbar = ({ userName, userRole, projectName, projectId, projectP6Id, onAddUser, onAddProject, onAssignProject, onAddIssue }: NavbarProps) => {
   // Note: User creation is role-based:
   // - PMAG can create Site PM and PMAG users
   // - Site PM can only create supervisors
@@ -485,6 +486,10 @@ export const Navbar = ({ userName, userRole, projectName, projectP6Id, onAddUser
                     {displayRole === "Site PM" && (
                       <>
 
+                        <DropdownMenuItem onClick={() => navigate("/supervisor", { state: { projectId: projectId, projectName: projectName } })}>
+                          <FileText className="mr-2 h-4 w-4" />
+                          <span>Live Sheets</span>
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setIsIssuesModalOpen(true)}>
                           <Eye className="mr-2 h-4 w-4" />
                           <span>View Issues</span>
@@ -496,6 +501,10 @@ export const Navbar = ({ userName, userRole, projectName, projectP6Id, onAddUser
                         <DropdownMenuItem onClick={() => navigate("/pmag", { state: { activeTab: "history" } })}>
                           <BarChart3 className="mr-2 h-4 w-4" />
                           <span>History</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate("/supervisor", { state: { projectId: projectId, projectName: projectName } })}>
+                          <FileText className="mr-2 h-4 w-4" />
+                          <span>Live Sheets</span>
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setIsIssuesModalOpen(true)}>
                           <Eye className="mr-2 h-4 w-4" />
