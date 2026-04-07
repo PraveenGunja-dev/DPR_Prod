@@ -138,9 +138,7 @@ async def health():
     return {"status": "ok", "backend": "fastapi", "version": "2.0.0"}
 
 
-@app.get("/")
-def read_root(): 
-    return {"status": "ok", "message": "Solar DPR FastAPI Backend is running."}
+# Root route removed to allow fallback to SPA (index.html)
 
 
 @app.get("/api/health")
