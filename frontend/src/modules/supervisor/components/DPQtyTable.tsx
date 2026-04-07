@@ -265,8 +265,7 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
           "Actual/Forecast Start": "date",
           "Actual/Forecast Finish": "date",
           [indianDateFormat(yesterday)]: "number",
-          [indianDateFormat(today)]: "number",
-          "Remarks": "text"
+          [indianDateFormat(today)]: "number"
         }}
         columnWidths={columnWidths}
         cellTextColors={cellTextColors}
@@ -291,8 +290,7 @@ export const DPQtyTable = memo(({ data, setData, onSave, onSubmit, yesterday, to
             { label: "Actual/Forecast Start", colSpan: 1 },
             { label: "Actual/Forecast Finish", colSpan: 1 },
             { label: indianDateFormat(yesterday), colSpan: 1 },
-            { label: indianDateFormat(today), colSpan: 1 },
-            { label: "Remarks", colSpan: 1 }
+            { label: indianDateFormat(today), colSpan: 1 }
           ]
         ]}
         status={status}

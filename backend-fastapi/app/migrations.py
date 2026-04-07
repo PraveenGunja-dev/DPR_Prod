@@ -307,8 +307,22 @@ async def run_migrations():
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        await _exec("CREATE INDEX IF NOT EXISTS idx_snapshots_entry ON dpr_entry_snapshots(entry_id, version)")
         await _exec("CREATE INDEX IF NOT EXISTS idx_snapshots_action ON dpr_entry_snapshots(action)")
+        
+        # User Column Preferences table
+        await _exec("""
+            CREATE TABLE IF NOT EXISTS user_column_preferences (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                project_id BIGINT NOT NULL,
+                sheet_type VARCHAR(50) NOT NULL,
+                visible_columns JSONB NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, project_id, sheet_type)
+            )
+        """)
+        await _exec("CREATE INDEX IF NOT EXISTS idx_user_prefs_lookup ON user_column_preferences(user_id, project_id, sheet_type)")
 
         logger.info("OK Migrations completed successfully")
 
