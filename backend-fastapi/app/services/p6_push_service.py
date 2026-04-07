@@ -111,7 +111,8 @@ async def _get_activity_object_id(pool, activity_id: str, project_object_id: int
 
 async def _push_resource_assignment_to_p6(
     client, headers: dict, ra_object_id: int,
-    actual_units: float, remaining_units: float
+    actual_units: float, remaining_units: float,
+    planned_units: Optional[float] = None
 ) -> dict:
     """
     PUT /resourceAssignment to update ActualUnits and RemainingUnits.
@@ -122,6 +123,8 @@ async def _push_resource_assignment_to_p6(
         "ActualUnits": actual_units,
         "RemainingUnits": remaining_units,
     }]
+    if planned_units is not None:
+        payload[0]["PlannedUnits"] = planned_units
 
     try:
         r = await client.put(
@@ -313,6 +316,17 @@ async def push_approved_entry_to_p6(
                 skipped += 1
                 continue
 
+            # Fetch BEFORE updating to allow proper override detection
+            act_db_row = await pool.fetchrow("SELECT actual_start, actual_finish, percent_complete FROM solar_activities WHERE object_id = $1", act_obj_id)
+            db_actual_start = act_db_row["actual_start"] if act_db_row else None
+            db_actual_finish = act_db_row["actual_finish"] if act_db_row else None
+
+            parsed_row_start = parse_date(actual_start) if actual_start else None
+            parsed_row_finish = parse_date(actual_finish) if actual_finish else None
+
+            # Always push dates if they are provided in the UI (Full Override)
+            dates_override = (actual_start is not None and actual_start != "") or (actual_finish is not None and actual_finish != "")
+
             # Update local DB solar_activities with dates and UOM if provided
             if not dry_run:
                 if actual_start or actual_finish or uom:
@@ -323,8 +337,8 @@ async def push_approved_entry_to_p6(
                             uom = COALESCE($3, uom)
                         WHERE object_id = $4
                     """, 
-                    parse_date(actual_start) if actual_start else None,
-                    parse_date(actual_finish) if actual_finish else None,
+                    parsed_row_start,
+                    parsed_row_finish,
                     uom,
                     act_obj_id
                     )
@@ -332,35 +346,25 @@ async def push_approved_entry_to_p6(
             # Find resource assignments (MT or MP)
             ras = await _get_resource_assignments_for_activity(pool, act_obj_id, project_id, sheet_type)
             
-            # Fetch existing activity data from DB to check for delta changes
-            act_db_row = await pool.fetchrow("SELECT actual_start, actual_finish, percent_complete FROM solar_activities WHERE object_id = $1", act_obj_id)
+            # Identify Scope change
+            scope_str = row.get("scope") or row.get("totalQuantity")
+            row_scope = _parse_actual_value(scope_str) if scope_str else None
             
-            db_actual_start = act_db_row["actual_start"] if act_db_row else None
-            db_actual_finish = act_db_row["actual_finish"] if act_db_row else None
-            
-            # Define normalized dates for comparison
-            parsed_row_start = parse_date(actual_start) if actual_start else None
-            parsed_row_finish = parse_date(actual_finish) if actual_finish else None
-            
-            # Did the dates actually change compared to what we already know?
-            dates_changed = (parsed_row_start != db_actual_start) or (parsed_row_finish != db_actual_finish)
-
             if not ras:
-                # If no RAs, we might still want to push activity dates if they changed explicitly
-                if dates_changed and not dry_run:
+                if dates_override and not dry_run:
                     await _push_activity_to_p6(client, headers, act_obj_id, 
-                                             actual_start=actual_start, 
-                                             actual_finish=actual_finish)
+                                             actual_start=actual_start if parsed_row_start else None, 
+                                             actual_finish=actual_finish if parsed_row_finish else None)
                     pushed += 1
                     details.append({"activityId": activity_id, "status": "success", "note": "Activity dates pushed (no RAs)"})
                 else:
                     skipped += 1
                 continue
 
-            # Calculate new values and update P6 resource assignments ONLY if there's actual daily progress
-            if today_val is not None and today_val != 0:
-                total_planned = sum(float(ra.get("planned_units") or 0) for ra in ras)
+            total_planned = sum(float(ra.get("planned_units") or 0) for ra in ras)
+            scope_changed = row_scope is not None and abs(row_scope - total_planned) > 0.01
 
+            if (today_val is not None) or scope_changed:
                 for ra in ras:
                     ra_obj_id = int(ra["object_id"])
                     old_actual = float(ra.get("actual_units") or 0)
@@ -368,12 +372,20 @@ async def push_approved_entry_to_p6(
 
                     if len(ras) == 1:
                         ra_today = today_val or 0
+                        ra_planned = row_scope if scope_changed else planned
                     else:
                         proportion = planned / total_planned if total_planned > 0 else 1.0 / len(ras)
                         ra_today = (today_val or 0) * proportion
+                        ra_planned = (row_scope * proportion) if scope_changed else planned
 
                     new_actual = old_actual + ra_today
-                    new_remaining = max(0, planned - new_actual)
+                    
+                    bal_str = row.get("balance") or row.get("remainingUnits")
+                    row_balance = _parse_actual_value(bal_str) if bal_str else None
+                    if row_balance is not None:
+                        new_remaining = row_balance if len(ras) == 1 else (row_balance * proportion)
+                    else:
+                        new_remaining = max(0, ra_planned - new_actual)
 
                     if dry_run:
                         pushed += 1
@@ -381,33 +393,29 @@ async def push_approved_entry_to_p6(
 
                     # Push to P6
                     result = await _push_resource_assignment_to_p6(
-                        client, headers, ra_obj_id, new_actual, new_remaining
+                        client, headers, ra_obj_id, new_actual, new_remaining, ra_planned
                     )
 
                     if result["success"]:
                         await pool.execute("""
-                            UPDATE solar_resource_assignments SET actual_units = $1, remaining_units = $2 WHERE object_id = $3
-                        """, new_actual, new_remaining, ra_obj_id)
+                            UPDATE solar_resource_assignments SET actual_units = $1, remaining_units = $2, planned_units = $4 WHERE object_id = $3
+                        """, new_actual, new_remaining, ra_obj_id, ra_planned)
                         pushed += 1
 
-            # Also update activity PercentComplete and Dates if dates changed or progress was posted
             pct_str = row.get("completionPercentage") or row.get("percentComplete")
-            
-            # Check if percentage explicitly changed (as an extra safety check)
             db_pct = float(act_db_row["percent_complete"]) if act_db_row and act_db_row["percent_complete"] is not None else -1
             row_pct = _parse_actual_value(pct_str) if pct_str else None
             pct_changed = (row_pct is not None and abs(row_pct - db_pct) > 0.01)
 
-            if (dates_changed or pct_changed or (today_val is not None and today_val != 0)) and not dry_run:
-                # If no dates explicitly modified, use None so P6 endpoint doesn't mutate them
-                push_start = actual_start if dates_changed and parsed_row_start != db_actual_start else None
-                push_finish = actual_finish if dates_changed and parsed_row_finish != db_actual_finish else None
+            if (dates_override or pct_changed or today_val is not None) and not dry_run:
+                push_start = actual_start if parsed_row_start else None
+                push_finish = actual_finish if parsed_row_finish else None
                 
                 await _push_activity_to_p6(client, headers, act_obj_id, 
                                          percent_complete=row_pct,
                                          actual_start=push_start,
                                          actual_finish=push_finish)
-            elif (today_val is None or today_val == 0) and not dates_changed and not pct_changed:
+            elif (today_val is None) and not dates_override and not pct_changed and not scope_changed:
                 skipped += 1
 
     # Update local DB cumulative values on solar_activities too
